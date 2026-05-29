@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useAppStore } from '../lib/store'
-import { analyzeFoodText, analyzeFoodImage, getApiKey, type AiFoodResult } from '../lib/claude'
+import { analyzeFoodText, analyzeFoodImage, getApiKey, type AiFoodResult } from '../lib/gemini'
 import type { MealLog, FoodEntry } from '../types'
 import { nanoid } from 'nanoid'
 import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X } from 'lucide-react'

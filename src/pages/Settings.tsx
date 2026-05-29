@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../lib/store'
-import { getApiKey, setApiKey } from '../lib/claude'
+import { getApiKey, setApiKey } from '../lib/gemini'
 import { Eye, EyeOff } from 'lucide-react'
 
 export default function Settings() {
@@ -126,21 +126,22 @@ export default function Settings() {
 
       {/* Claude API キー設定 */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="font-semibold text-gray-700 mb-1">AI食品解析 (Claude API)</h2>
+        <h2 className="font-semibold text-gray-700 mb-1">AI食品解析 (Gemini API)</h2>
         <p className="text-xs text-gray-400 mb-3">
           食事の写真やテキストからAIが栄養素を自動推定します。<br />
-          <a href="https://console.anthropic.com/" target="_blank" rel="noreferrer" className="text-green-500 underline">
-            Anthropic Console
+          <span className="text-green-600 font-medium">無料で使えます</span>（1,500回/日）<br />
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-green-500 underline">
+            Google AI Studio
           </a> でAPIキーを取得してください。
         </p>
         <label className="block">
-          <span className="text-sm font-medium text-gray-600">APIキー</span>
+          <span className="text-sm font-medium text-gray-600">Gemini APIキー</span>
           <div className="relative mt-1">
             <input
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKeyState(e.target.value)}
-              placeholder="sk-ant-..."
+              placeholder="AIza..."
               className="block w-full border border-gray-200 rounded-xl px-3 py-2 pr-10 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
             />
             <button
