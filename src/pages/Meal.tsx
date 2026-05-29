@@ -44,6 +44,16 @@ export default function Meal() {
   const today = new Date().toISOString().slice(0, 10)
 
   const [mealType, setMealType] = useState<MealType>('breakfast')
+
+  const handleMealTypeChange = (t: MealType) => {
+    setMealType(t)
+    // タブ切替時は結果・入力をリセット（モードは維持）
+    setResults(null)
+    setError(null)
+    setTextInput('')
+    setPreviewUrl(null)
+    setImageBase64(null)
+  }
   const [mode, setMode] = useState<'idle' | 'text' | 'image'>('idle')
   const [textInput, setTextInput] = useState('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -137,8 +147,9 @@ export default function Meal() {
         updatedLogs = [...data.mealLogs, { id: nanoid(), date: today, mealType, entries }]
       }
       await saveData({ mealLogs: updatedLogs })
+      // 追加後はモードを維持して入力・結果だけリセット→すぐ再解析できる
       setResults(null)
-      setMode('idle')
+      setError(null)
       setTextInput('')
       setPreviewUrl(null)
       setImageBase64(null)
@@ -204,7 +215,7 @@ export default function Meal() {
         {/* 食事タイプ */}
         <div className="flex gap-2 mb-4">
           {(Object.keys(MEAL_LABELS) as MealType[]).map((t) => (
-            <button key={t} onClick={() => setMealType(t)}
+            <button key={t} onClick={() => handleMealTypeChange(t)}
               className={`flex-1 py-1.5 text-xs rounded-lg transition ${mealType === t ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500'}`}>
               {MEAL_LABELS[t]}
             </button>
