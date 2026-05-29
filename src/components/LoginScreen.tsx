@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { requestAccessToken, initGoogleAuth } from '../lib/google'
 import { useAppStore } from '../lib/store'
 
-export default function LoginScreen() {
+interface Props {
+  sdkReady: boolean
+}
+
+export default function LoginScreen({ sdkReady }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { setAuthenticated, loadData } = useAppStore()
@@ -43,7 +47,7 @@ export default function LoginScreen() {
 
         <button
           onClick={handleLogin}
-          disabled={loading}
+          disabled={loading || !sdkReady}
           className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-xl py-3 px-4 shadow-sm hover:bg-gray-50 active:bg-gray-100 transition disabled:opacity-50"
         >
           <img
@@ -52,7 +56,7 @@ export default function LoginScreen() {
             className="w-5 h-5"
           />
           <span className="text-gray-700 font-medium">
-            {loading ? '接続中...' : 'Googleでサインイン'}
+            {!sdkReady ? '読み込み中...' : loading ? '接続中...' : 'Googleでサインイン'}
           </span>
         </button>
       </div>

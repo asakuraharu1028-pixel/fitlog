@@ -2,12 +2,31 @@ import { create } from 'zustand'
 import type { AppData } from '../types'
 import { loadFromDrive, saveToDrive } from './google'
 
+const STORAGE_KEY = 'fitlog-data'
+
 const DEFAULT_DATA: AppData = {
   bodyRecords: [],
   mealLogs: [],
   cardioLogs: [],
   strengthLogs: [],
   settings: { heightCm: 170 },
+}
+
+function loadFromLocal(): AppData | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as AppData) : null
+  } catch {
+    return null
+  }
+}
+
+function saveToLocal(data: AppData) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  } catch {
+    // quota exceeded など
+  }
 }
 
 interface AppStore {
@@ -21,7 +40,8 @@ interface AppStore {
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
-  data: DEFAULT_DATA,
+  // 初期値はlocalStorageから復元
+  data: loadFromLocal() ?? DEFAULT_DATA,
   isLoading: false,
   isSaving: false,
   isAuthenticated: false,
@@ -32,7 +52,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ isLoading: true })
     try {
       const remote = await loadFromDrive<AppData>()
-      set({ data: remote ?? DEFAULT_DATA })
+      if (remote) {
+        set({ data: remote })
+        saveToLocal(remote)
+      }
     } finally {
       set({ isLoading: false })
     }
@@ -41,6 +64,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   saveData: async (patch) => {
     const next = { ...get().data, ...patch }
     set({ data: next, isSaving: true })
+    saveToLocal(next) // まずローカルに即保存
     try {
       await saveToDrive(next)
     } finally {
