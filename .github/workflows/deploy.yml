@@ -21,15 +21,13 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: fitlog/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci
-        working-directory: fitlog
       - run: npm run build
-        working-directory: fitlog
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: fitlog/dist
+          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4
