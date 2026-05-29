@@ -8,6 +8,7 @@ import Meal from './pages/Meal'
 import Exercise from './pages/Exercise'
 import Body from './pages/Body'
 import Report from './pages/Report'
+import Settings from './pages/Settings'
 
 export default function App() {
   const { isAuthenticated } = useAppStore()
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="exercise" element={<Exercise />} />
           <Route path="body" element={<Body />} />
           <Route path="report" element={<Report />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </HashRouter>

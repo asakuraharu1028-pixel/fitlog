@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Home, Utensils, Dumbbell, Scale, BarChart2 } from 'lucide-react'
+import { Home, Utensils, Dumbbell, Scale, BarChart2, Settings } from 'lucide-react'
 import { useAppStore } from '../lib/store'
 
 const navItems = [
@@ -8,6 +8,7 @@ const navItems = [
   { to: '/exercise', icon: Dumbbell, label: '運動' },
   { to: '/body', icon: Scale, label: '体重' },
   { to: '/report', icon: BarChart2, label: 'レポート' },
+  { to: '/settings', icon: Settings, label: '設定' },
 ]
 
 export default function Layout() {
