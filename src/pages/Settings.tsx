@@ -126,22 +126,23 @@ export default function Settings() {
 
       {/* Claude API キー設定 */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="font-semibold text-gray-700 mb-1">AI食品解析 (Gemini API)</h2>
+        <h2 className="font-semibold text-gray-700 mb-1">AI食品解析</h2>
         <p className="text-xs text-gray-400 mb-3">
           食事の写真やテキストからAIが栄養素を自動推定します。<br />
-          <span className="text-green-600 font-medium">無料で使えます</span>（1,500回/日）<br />
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-green-500 underline">
-            Google AI Studio
-          </a> でAPIキーを取得してください。
+          <span className="text-green-600 font-medium">OpenRouter（無料・推奨）</span><br />
+          <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className="text-green-500 underline">
+            openrouter.ai
+          </a> でGoogleログイン → Keys → Create Key<br />
+          <span className="text-gray-400">※ GeminiのAPIキー（AIza...）も引き続き使えます</span>
         </p>
         <label className="block">
-          <span className="text-sm font-medium text-gray-600">Gemini APIキー</span>
+          <span className="text-sm font-medium text-gray-600">APIキー</span>
           <div className="relative mt-1">
             <input
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKeyState(e.target.value)}
-              placeholder="AIza..."
+              placeholder="sk-or-... または AIza..."
               className="block w-full border border-gray-200 rounded-xl px-3 py-2 pr-10 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
             />
             <button
