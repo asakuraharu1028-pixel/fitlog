@@ -19,17 +19,20 @@ export default function Settings() {
     const h = parseFloat(height)
     if (isNaN(h) || h <= 0) return
     setSaving(true)
-    await saveData({
-      settings: {
-        ...data.settings,
-        heightCm: h,
-        goalWeightKg: goalWeight ? parseFloat(goalWeight) : undefined,
-        goalCalories: goalCalories ? parseInt(goalCalories) : undefined,
-      },
-    })
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    try {
+      await saveData({
+        settings: {
+          ...data.settings,
+          heightCm: h,
+          goalWeightKg: goalWeight ? parseFloat(goalWeight) : undefined,
+          goalCalories: goalCalories ? parseInt(goalCalories) : undefined,
+        },
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

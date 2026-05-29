@@ -30,22 +30,25 @@ export default function Body() {
     const w = parseFloat(weight)
     if (isNaN(w)) return
     setSaving(true)
-    const bf = parseFloat(bodyFat)
-    const record: BodyRecord = {
-      id: existing?.id ?? nanoid(),
-      date: today,
-      weight: w,
-      bodyFatPct: isNaN(bf) ? undefined : bf,
-      bmi: calcBMI(w, data.settings.heightCm),
+    try {
+      const bf = parseFloat(bodyFat)
+      const record: BodyRecord = {
+        id: existing?.id ?? nanoid(),
+        date: today,
+        weight: w,
+        bodyFatPct: isNaN(bf) ? undefined : bf,
+        bmi: calcBMI(w, data.settings.heightCm),
+      }
+      const updated = data.bodyRecords.filter((r) => r.date !== today)
+      updated.push(record)
+      await saveData({ bodyRecords: updated })
+      setSaved(true)
+      setWeight('')
+      setBodyFat('')
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
     }
-    const updated = data.bodyRecords.filter((r) => r.date !== today)
-    updated.push(record)
-    await saveData({ bodyRecords: updated })
-    setSaving(false)
-    setSaved(true)
-    setWeight('')
-    setBodyFat('')
-    setTimeout(() => setSaved(false), 2000)
   }
 
   // グラフ用データ生成
