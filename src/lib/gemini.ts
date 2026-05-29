@@ -46,7 +46,7 @@ const PROMPT_SUFFIX = `
 栄養素は日本食品標準成分表を参考に、推定グラム数に合わせた絶対量で返してください。`
 
 async function callGemini(apiKey: string, parts: object[]): Promise<AiFoodResult[]> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
