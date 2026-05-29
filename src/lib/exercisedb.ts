@@ -24,6 +24,7 @@ export const CARDIO_DB: CardioExercise[] = [
   { id: 'dance',         name: 'ダンス',                   met: 5.0 },
   { id: 'yoga',          name: 'ヨガ',                     met: 3.0 },
   { id: 'stretching',    name: 'ストレッチ',               met: 2.3 },
+  { id: 'radio_taiso',   name: 'ラジオ体操',               met: 4.0 },
   { id: 'hiit',          name: 'HIIT',                     met: 12.0 },
   { id: 'elliptical',    name: 'エリプティカル',           met: 5.0 },
   { id: 'stair',         name: '階段昇降',                 met: 8.0 },
@@ -44,54 +45,65 @@ export interface StrengthExercise {
   name: string
   category: '胸' | '背中' | '肩' | '腕' | '脚' | '体幹' | '全身'
   metPerMin: number // 筋トレ中のMET（推定消費カロリー用）
+  unit: 'reps' | 'seconds' // 回数 or 秒数
 }
 
 export const STRENGTH_DB: StrengthExercise[] = [
   // 胸
-  { id: 'bench_press',    name: 'ベンチプレス',         category: '胸',   metPerMin: 5.0 },
-  { id: 'push_up',        name: 'プッシュアップ',       category: '胸',   metPerMin: 3.8 },
-  { id: 'dumbbell_fly',   name: 'ダンベルフライ',       category: '胸',   metPerMin: 4.0 },
-  { id: 'incline_press',  name: 'インクラインプレス',   category: '胸',   metPerMin: 5.0 },
+  { id: 'wall_push_up',   name: 'ウォールプッシュアップ', category: '胸',   metPerMin: 2.5, unit: 'reps' },
+  { id: 'knee_push_up',   name: '膝つきプッシュアップ',   category: '胸',   metPerMin: 3.0, unit: 'reps' },
+  { id: 'push_up',        name: 'プッシュアップ',         category: '胸',   metPerMin: 3.8, unit: 'reps' },
+  { id: 'bench_press',    name: 'ベンチプレス',           category: '胸',   metPerMin: 5.0, unit: 'reps' },
+  { id: 'dumbbell_fly',   name: 'ダンベルフライ',         category: '胸',   metPerMin: 4.0, unit: 'reps' },
+  { id: 'incline_press',  name: 'インクラインプレス',     category: '胸',   metPerMin: 5.0, unit: 'reps' },
   // 背中
-  { id: 'deadlift',       name: 'デッドリフト',         category: '背中', metPerMin: 6.0 },
-  { id: 'pull_up',        name: '懸垂（チンアップ）',   category: '背中', metPerMin: 5.0 },
-  { id: 'lat_pulldown',   name: 'ラットプルダウン',     category: '背中', metPerMin: 4.5 },
-  { id: 'bent_over_row',  name: 'ベントオーバーロウ',   category: '背中', metPerMin: 5.0 },
-  { id: 'seated_row',     name: 'シーテッドロウ',       category: '背中', metPerMin: 4.5 },
+  { id: 'deadlift',       name: 'デッドリフト',           category: '背中', metPerMin: 6.0, unit: 'reps' },
+  { id: 'pull_up',        name: '懸垂（チンアップ）',     category: '背中', metPerMin: 5.0, unit: 'reps' },
+  { id: 'lat_pulldown',   name: 'ラットプルダウン',       category: '背中', metPerMin: 4.5, unit: 'reps' },
+  { id: 'bent_over_row',  name: 'ベントオーバーロウ',     category: '背中', metPerMin: 5.0, unit: 'reps' },
+  { id: 'seated_row',     name: 'シーテッドロウ',         category: '背中', metPerMin: 4.5, unit: 'reps' },
   // 肩
-  { id: 'shoulder_press', name: 'ショルダープレス',     category: '肩',   metPerMin: 4.5 },
-  { id: 'lateral_raise',  name: 'サイドレイズ',         category: '肩',   metPerMin: 3.5 },
-  { id: 'front_raise',    name: 'フロントレイズ',       category: '肩',   metPerMin: 3.5 },
+  { id: 'shoulder_press', name: 'ショルダープレス',       category: '肩',   metPerMin: 4.5, unit: 'reps' },
+  { id: 'lateral_raise',  name: 'サイドレイズ',           category: '肩',   metPerMin: 3.5, unit: 'reps' },
+  { id: 'front_raise',    name: 'フロントレイズ',         category: '肩',   metPerMin: 3.5, unit: 'reps' },
   // 腕
-  { id: 'bicep_curl',     name: 'バイセップカール',     category: '腕',   metPerMin: 3.5 },
-  { id: 'tricep_push',    name: 'トライセップスプッシュダウン', category: '腕', metPerMin: 3.5 },
-  { id: 'hammer_curl',    name: 'ハンマーカール',       category: '腕',   metPerMin: 3.5 },
+  { id: 'bicep_curl',     name: 'バイセップカール',       category: '腕',   metPerMin: 3.5, unit: 'reps' },
+  { id: 'tricep_push',    name: 'トライセップスプッシュダウン', category: '腕', metPerMin: 3.5, unit: 'reps' },
+  { id: 'hammer_curl',    name: 'ハンマーカール',         category: '腕',   metPerMin: 3.5, unit: 'reps' },
   // 脚
-  { id: 'squat',          name: 'スクワット',           category: '脚',   metPerMin: 5.0 },
-  { id: 'leg_press',      name: 'レッグプレス',         category: '脚',   metPerMin: 4.5 },
-  { id: 'lunge',          name: 'ランジ',               category: '脚',   metPerMin: 4.0 },
-  { id: 'leg_curl',       name: 'レッグカール',         category: '脚',   metPerMin: 3.5 },
-  { id: 'leg_extension',  name: 'レッグエクステンション', category: '脚', metPerMin: 3.5 },
-  { id: 'calf_raise',     name: 'カーフレイズ',         category: '脚',   metPerMin: 3.0 },
+  { id: 'chair_squat',    name: '椅子スクワット',         category: '脚',   metPerMin: 2.8, unit: 'reps' },
+  { id: 'squat',          name: 'スクワット',             category: '脚',   metPerMin: 5.0, unit: 'reps' },
+  { id: 'leg_press',      name: 'レッグプレス',           category: '脚',   metPerMin: 4.5, unit: 'reps' },
+  { id: 'lunge',          name: 'ランジ',                 category: '脚',   metPerMin: 4.0, unit: 'reps' },
+  { id: 'leg_curl',       name: 'レッグカール',           category: '脚',   metPerMin: 3.5, unit: 'reps' },
+  { id: 'leg_extension',  name: 'レッグエクステンション', category: '脚',   metPerMin: 3.5, unit: 'reps' },
+  { id: 'calf_raise',     name: 'カーフレイズ',           category: '脚',   metPerMin: 3.0, unit: 'reps' },
   // 体幹
-  { id: 'plank',          name: 'プランク',             category: '体幹', metPerMin: 3.5 },
-  { id: 'crunch',         name: 'クランチ',             category: '体幹', metPerMin: 3.8 },
-  { id: 'leg_raise',      name: 'レッグレイズ',         category: '体幹', metPerMin: 3.8 },
-  { id: 'russian_twist',  name: 'ロシアンツイスト',     category: '体幹', metPerMin: 3.5 },
+  { id: 'knee_plank',     name: '膝プランク',             category: '体幹', metPerMin: 2.5, unit: 'seconds' },
+  { id: 'plank',          name: 'プランク',               category: '体幹', metPerMin: 3.5, unit: 'seconds' },
+  { id: 'side_plank',     name: 'サイドプランク',         category: '体幹', metPerMin: 3.0, unit: 'seconds' },
+  { id: 'crunch',         name: 'クランチ',               category: '体幹', metPerMin: 3.8, unit: 'reps' },
+  { id: 'leg_raise',      name: 'レッグレイズ',           category: '体幹', metPerMin: 3.8, unit: 'reps' },
+  { id: 'russian_twist',  name: 'ロシアンツイスト',       category: '体幹', metPerMin: 3.5, unit: 'reps' },
+  { id: 'bird_dog',       name: 'バードドッグ',           category: '体幹', metPerMin: 2.5, unit: 'reps' },
+  { id: 'dead_bug',       name: 'デッドバグ',             category: '体幹', metPerMin: 2.5, unit: 'reps' },
   // 全身
-  { id: 'burpee',         name: 'バーピー',             category: '全身', metPerMin: 8.0 },
-  { id: 'clean',          name: 'パワークリーン',       category: '全身', metPerMin: 6.0 },
-  { id: 'kettlebell',     name: 'ケトルベルスイング',   category: '全身', metPerMin: 9.0 },
+  { id: 'burpee',         name: 'バーピー',               category: '全身', metPerMin: 8.0, unit: 'reps' },
+  { id: 'clean',          name: 'パワークリーン',         category: '全身', metPerMin: 6.0, unit: 'reps' },
+  { id: 'kettlebell',     name: 'ケトルベルスイング',     category: '全身', metPerMin: 9.0, unit: 'reps' },
 ]
 
-// 筋トレ消費カロリー推定: MET × 体重 × 時間（セット数×推定時間）
+// 筋トレ消費カロリー推定
 export function calcStrengthCalories(
   metPerMin: number,
   weightKg: number,
-  sets: { weight: number; reps: number }[]
+  sets: { weight: number; reps: number }[],
+  isSeconds = false
 ): number {
-  // 1セットあたり約1〜2分（実施+休憩込みで2分と仮定）
-  const totalMin = sets.length * 2
+  // 秒数種目：合計秒数をそのまま使う、回数種目：1セット2分と仮定
+  const totalMin = isSeconds
+    ? sets.reduce((s, v) => s + v.reps, 0) / 60
+    : sets.length * 2
   return Math.round(metPerMin * weightKg * (totalMin / 60))
 }
 

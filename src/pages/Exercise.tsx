@@ -28,6 +28,9 @@ export default function Exercise() {
   const [category, setCategory] = useState<typeof CATEGORIES[number]>('全身')
   const [strengthId, setStrengthId] = useState(STRENGTH_DB[0].id)
   const [sets, setSets] = useState([{ weight: 0, reps: 10 }])
+
+  const selectedStrength = STRENGTH_DB.find((s) => s.id === strengthId) ?? STRENGTH_DB[0]
+  const isSeconds = selectedStrength.unit === 'seconds'
   const [strengthSaving, setStrengthSaving] = useState(false)
   const [strengthSaved, setStrengthSaved] = useState(false)
 
@@ -75,7 +78,7 @@ export default function Exercise() {
         date: today,
         name: exercise.name,
         sets,
-        estimatedCalories: calcStrengthCalories(exercise.metPerMin, bodyWeight, sets),
+        estimatedCalories: calcStrengthCalories(exercise.metPerMin, bodyWeight, sets, isSeconds),
       }
       await saveData({ strengthLogs: [...data.strengthLogs, log] })
       setStrengthSaved(true)
@@ -220,10 +223,16 @@ export default function Exercise() {
             {/* 種目 */}
             <label className="block">
               <span className="text-sm text-gray-500">種目</span>
-              <select value={strengthId} onChange={(e) => setStrengthId(e.target.value)}
+              <select value={strengthId} onChange={(e) => {
+                  const next = STRENGTH_DB.find(s => s.id === e.target.value)
+                  setStrengthId(e.target.value)
+                  setSets([{ weight: 0, reps: next?.unit === 'seconds' ? 30 : 10 }])
+                }}
                 className="mt-1 block w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-400">
                 {filteredStrength.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.name}{s.unit === 'seconds' ? '（秒）' : ''}
+                  </option>
                 ))}
               </select>
             </label>
@@ -231,8 +240,10 @@ export default function Exercise() {
             {/* セット入力 */}
             <div>
               <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-gray-500">セット</span>
-                <button onClick={() => setSets([...sets, { weight: sets[sets.length - 1]?.weight ?? 0, reps: sets[sets.length - 1]?.reps ?? 10 }])}
+                <span className="text-sm text-gray-500">
+                  セット {isSeconds && <span className="text-xs text-purple-500">（秒数で入力）</span>}
+                </span>
+                <button onClick={() => setSets([...sets, { weight: sets[sets.length - 1]?.weight ?? 0, reps: sets[sets.length - 1]?.reps ?? (isSeconds ? 30 : 10) }])}
                   className="text-xs text-purple-500 font-medium flex items-center gap-1">
                   <Plus size={12} /> セット追加
                 </button>
@@ -251,7 +262,7 @@ export default function Exercise() {
                         <input type="number" value={set.reps} min={1}
                           onChange={(e) => { const s = [...sets]; s[i] = { ...s[i], reps: parseInt(e.target.value) || 1 }; setSets(s) }}
                           className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-purple-400" />
-                        <span className="text-xs text-gray-400">回</span>
+                        <span className="text-xs text-gray-400">{isSeconds ? '秒' : '回'}</span>
                       </div>
                     </div>
                     {sets.length > 1 && (
@@ -271,12 +282,16 @@ export default function Exercise() {
                 <p className="text-xs text-gray-400">セット</p>
               </div>
               <div>
-                <p className="font-bold text-purple-600">{calcVolume(sets).toLocaleString()}</p>
-                <p className="text-xs text-gray-400">総ボリューム kg</p>
+                <p className="font-bold text-purple-600">
+                  {isSeconds
+                    ? sets.reduce((s, v) => s + v.reps, 0) + '秒'
+                    : calcVolume(sets).toLocaleString() + 'kg'}
+                </p>
+                <p className="text-xs text-gray-400">{isSeconds ? '合計秒数' : '総ボリューム'}</p>
               </div>
               <div>
                 <p className="font-bold text-orange-500">
-                  {calcStrengthCalories(STRENGTH_DB.find(s => s.id === strengthId)?.metPerMin ?? 4, bodyWeight, sets)}
+                  {calcStrengthCalories(selectedStrength.metPerMin, bodyWeight, sets, isSeconds)}
                 </p>
                 <p className="text-xs text-gray-400">消費 kcal</p>
               </div>
@@ -303,7 +318,12 @@ export default function Exercise() {
                         onClick={() => setExpandedId(isOpen ? null : s.id)}>
                         <div className="text-left">
                           <p className="text-sm font-medium text-gray-700">{s.name}</p>
-                          <p className="text-xs text-gray-400">{s.sets.length}セット｜{volume.toLocaleString()}kg vol</p>
+                          <p className="text-xs text-gray-400">
+                            {s.sets.length}セット｜
+                            {STRENGTH_DB.find(e => e.name === s.name)?.unit === 'seconds'
+                              ? s.sets.reduce((a, v) => a + v.reps, 0) + '秒'
+                              : volume.toLocaleString() + 'kg vol'}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-orange-500">{s.estimatedCalories ?? 0} kcal</span>
@@ -317,7 +337,7 @@ export default function Exercise() {
                               <tr className="text-gray-400 text-xs">
                                 <th className="text-left pb-1">セット</th>
                                 <th className="text-right pb-1">重量</th>
-                                <th className="text-right pb-1">回数</th>
+                                <th className="text-right pb-1">回数/秒数</th>
                                 <th className="text-right pb-1">ボリューム</th>
                               </tr>
                             </thead>
