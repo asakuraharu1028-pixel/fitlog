@@ -42,7 +42,7 @@ async function callOpenRouter(apiKey: string, messages: object[]): Promise<AiFoo
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
+      model: 'qwen/qwen2-vl-7b-instruct:free',
       messages,
     }),
   })
