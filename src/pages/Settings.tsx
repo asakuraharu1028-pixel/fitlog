@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../lib/store'
 import { getApiKey, setApiKey } from '../lib/gemini'
+import { loadFromDrive, saveToDrive, getAccessToken } from '../lib/google'
 import { Eye, EyeOff } from 'lucide-react'
 
 export default function Settings() {
@@ -13,6 +14,8 @@ export default function Settings() {
   const [apiKey, setApiKeyState] = useState(getApiKey)
   const [showKey, setShowKey] = useState(false)
   const [apiKeySaved, setApiKeySaved] = useState(false)
+  const [diagLog, setDiagLog] = useState<string[]>([])
+  const [diagRunning, setDiagRunning] = useState(false)
 
   useEffect(() => {
     setHeight(String(data.settings.heightCm))
@@ -165,6 +168,44 @@ export default function Settings() {
         >
           {apiKeySaved ? '✓ 保存しました' : 'APIキーを保存'}
         </button>
+      </div>
+
+      {/* Drive 診断 */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <h2 className="font-semibold text-gray-700 mb-2">Drive 診断</h2>
+        <button
+          onClick={async () => {
+            setDiagRunning(true)
+            const logs: string[] = []
+            try {
+              const token = getAccessToken()
+              logs.push(`トークン: ${token ? token.slice(0, 20) + '...' : 'なし'}`)
+
+              logs.push('Drive に書き込みテスト中...')
+              await saveToDrive({ _diagTest: true, ts: Date.now() })
+              logs.push('✓ Drive 書き込み成功')
+
+              logs.push('Drive から読み込みテスト中...')
+              const remote = await loadFromDrive<Record<string, unknown>>()
+              logs.push(`✓ Drive 読み込み成功: ${JSON.stringify(remote).slice(0, 80)}`)
+            } catch (e) {
+              logs.push(`✗ エラー: ${e instanceof Error ? e.message : String(e)}`)
+            }
+            setDiagLog(logs)
+            setDiagRunning(false)
+          }}
+          disabled={diagRunning}
+          className="w-full bg-gray-700 text-white rounded-xl py-2.5 font-semibold disabled:opacity-40"
+        >
+          {diagRunning ? '診断中...' : 'Drive 接続テスト'}
+        </button>
+        {diagLog.length > 0 && (
+          <div className="mt-3 bg-gray-50 rounded-xl p-3 text-xs font-mono space-y-1">
+            {diagLog.map((l, i) => (
+              <p key={i} className={l.startsWith('✗') ? 'text-red-600' : l.startsWith('✓') ? 'text-green-600' : 'text-gray-600'}>{l}</p>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
