@@ -4,5 +4,6 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: '/fitlog/',
+  // Android(Capacitor)ビルド時は base: '/'、GitHub Pagesは '/fitlog/'
+  base: process.env.BUILD_TARGET === 'android' ? '/' : '/fitlog/',
 })

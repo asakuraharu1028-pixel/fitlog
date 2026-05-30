@@ -6,12 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:android": "tsc -b && cross-env BUILD_TARGET=android vite build && npx cap sync android",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
     "@types/gapi": "^0.0.47",
     "@types/google.accounts": "^0.0.18",
+    "cross-env": "^10.1.0",
     "lucide-react": "^1.17.0",
     "nanoid": "^5.1.11",
     "react": "^19.2.6",
