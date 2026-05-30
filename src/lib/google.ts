@@ -99,11 +99,23 @@ export async function saveToDrive<T>(data: T): Promise<void> {
   const fileId = await findDataFile()
 
   if (fileId) {
-    await driveRequest(`/upload/drive/v3/files/${fileId}?uploadType=media`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    })
+    // アップロード系は別ベース URL なので直接 fetch する
+    if (!accessToken) throw new Error('Not authenticated')
+    const res = await fetch(
+      `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body,
+      }
+    )
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`Drive update error: ${res.status} - ${text}`)
+    }
   } else {
     const meta = JSON.stringify({ name: FILE_NAME, parents: ['appDataFolder'] })
     const form = new FormData()
