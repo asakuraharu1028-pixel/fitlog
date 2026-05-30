@@ -181,13 +181,14 @@ export default function Settings() {
               const token = getAccessToken()
               logs.push(`トークン: ${token ? token.slice(0, 20) + '...' : 'なし'}`)
 
-              logs.push('Drive に書き込みテスト中...')
-              await saveToDrive({ _diagTest: true, ts: Date.now() })
-              logs.push('✓ Drive 書き込み成功')
-
               logs.push('Drive から読み込みテスト中...')
               const remote = await loadFromDrive<Record<string, unknown>>()
-              logs.push(`✓ Drive 読み込み成功: ${JSON.stringify(remote).slice(0, 80)}`)
+              logs.push(`✓ Drive 読み込み成功: keys=${Object.keys(remote ?? {}).join(',') || 'なし(空)'}`)
+              logs.push('Drive に書き込みテスト中...')
+              const { data: currentData } = useAppStore.getState()
+              await saveToDrive(currentData)
+              logs.push('✓ Drive 書き込み成功（現在のデータを保存）')
+
             } catch (e) {
               logs.push(`✗ エラー: ${e instanceof Error ? e.message : String(e)}`)
             }

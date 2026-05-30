@@ -1,4 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Component } from 'react'
+import type { ReactNode } from 'react'
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(e: Error) { return { error: e.message + '\n' + e.stack } }
+  render() {
+    if (this.state.error) return (
+      <div style={{ padding: 16, background: '#fee', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+        <b>RENDER ERROR:</b>{'\n'}{this.state.error}
+      </div>
+    )
+    return this.props.children
+  }
+}
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { useAppStore } from './lib/store'
 import { isNative, initAuth, signIn, signInSilent } from './lib/auth'
@@ -44,6 +58,7 @@ export default function App() {
 
   // OAuthコールバックはログイン状態に関係なく表示
   return (
+    <ErrorBoundary>
     <HashRouter>
       <Routes>
         {/* GitHub Pages経由のOAuthコールバック */}
@@ -68,5 +83,6 @@ export default function App() {
         } />
       </Routes>
     </HashRouter>
+    </ErrorBoundary>
   )
 }

@@ -12,10 +12,20 @@ const DEFAULT_DATA: AppData = {
   settings: { heightCm: 170 },
 }
 
+function isValidAppData(d: unknown): d is AppData {
+  return !!d && typeof d === 'object' && Array.isArray((d as AppData).bodyRecords)
+}
+
 function loadFromLocal(): AppData | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as AppData) : null
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!isValidAppData(parsed)) {
+      localStorage.removeItem(STORAGE_KEY) // 不正データを削除
+      return null
+    }
+    return { ...DEFAULT_DATA, ...parsed }
   } catch {
     return null
   }
@@ -51,9 +61,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ isLoading: true, driveError: null })
     try {
       const remote = await loadFromDrive<AppData>()
-      if (remote) {
-        set({ data: remote })
-        saveToLocal(remote)
+      if (remote && Array.isArray(remote.bodyRecords)) {
+        const merged = { ...DEFAULT_DATA, ...remote }
+        set({ data: merged })
+        saveToLocal(merged)
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
