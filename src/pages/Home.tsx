@@ -64,7 +64,7 @@ export default function Home() {
         <h2 className="text-sm font-semibold text-gray-500 mb-2">今日の体重</h2>
         {todayBody ? (
           <div className="flex gap-4">
-            <Stat label="体重" value={`${todayBody.weight} kg`} />
+            <Stat label="体重" value={`${todayBody.weight.toFixed(2)} kg`} />
             {todayBody.bodyFatPct != null && (
               <Stat label="体脂肪率" value={`${todayBody.bodyFatPct} %`} />
             )}

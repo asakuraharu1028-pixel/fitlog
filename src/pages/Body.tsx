@@ -72,7 +72,7 @@ export default function Body() {
   // 最新記録
   const latest = sorted[sorted.length - 1]
   const prev = sorted[sorted.length - 2]
-  const diff = latest && prev ? Math.round((latest.weight - prev.weight) * 10) / 10 : null
+  const diff = latest && prev ? Math.round((latest.weight - prev.weight) * 100) / 100 : null
 
   const recent = [...sorted].reverse().slice(0, 30)
 
@@ -124,11 +124,11 @@ export default function Body() {
           <h2 className="font-semibold text-gray-700 mb-3">最新の記録</h2>
           <div className="flex justify-around text-center">
             <div>
-              <p className="text-2xl font-bold text-gray-800">{latest.weight}<span className="text-sm font-normal text-gray-400"> kg</span></p>
+              <p className="text-2xl font-bold text-gray-800">{latest.weight.toFixed(2)}<span className="text-sm font-normal text-gray-400"> kg</span></p>
               <p className="text-xs text-gray-400">体重</p>
               {diff !== null && (
                 <p className={`text-xs mt-0.5 ${diff < 0 ? 'text-green-500' : diff > 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                  {diff > 0 ? `+${diff}` : diff} kg
+                  {diff > 0 ? `+${diff.toFixed(2)}` : diff?.toFixed(2)} kg
                 </p>
               )}
             </div>
@@ -147,7 +147,7 @@ export default function Body() {
             {data.settings.goalWeightKg && (
               <div>
                 <p className="text-2xl font-bold text-orange-400">
-                  {Math.round((latest.weight - data.settings.goalWeightKg) * 10) / 10}
+                  {(Math.round((latest.weight - data.settings.goalWeightKg!) * 100) / 100).toFixed(2)}
                   <span className="text-sm font-normal text-gray-400"> kg</span>
                 </p>
                 <p className="text-xs text-gray-400">目標まで</p>
@@ -243,7 +243,7 @@ export default function Body() {
               {recent.map((r) => (
                 <tr key={r.id} className="border-b border-gray-50">
                   <td className="py-2 text-gray-600">{r.date}</td>
-                  <td className="py-2 text-right font-medium">{r.weight}</td>
+                  <td className="py-2 text-right font-medium">{r.weight.toFixed(2)}</td>
                   <td className="py-2 text-right text-gray-500">{r.bodyFatPct ?? '—'}</td>
                   <td className="py-2 text-right text-gray-500">{r.bmi ?? '—'}</td>
                 </tr>
