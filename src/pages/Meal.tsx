@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
 import { useAppStore } from '../lib/store'
 import { analyzeFoodText, analyzeFoodImage, getApiKey, type AiFoodResult } from '../lib/gemini'
+import { getMealAdvice } from '../lib/advice'
 import type { MealLog, FoodEntry } from '../types'
 import { nanoid } from 'nanoid'
-import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles } from 'lucide-react'
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 const MEAL_LABELS: Record<MealType, string> = {
@@ -63,6 +64,8 @@ export default function Meal() {
   const [results, setResults] = useState<AiFoodResult[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [advice, setAdvice] = useState<string | null>(null)
+  const [adviceLoading, setAdviceLoading] = useState(false)
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -147,12 +150,27 @@ export default function Meal() {
         updatedLogs = [...data.mealLogs, { id: nanoid(), date: today, mealType, entries }]
       }
       await saveData({ mealLogs: updatedLogs })
-      // 追加後はモードを維持して入力・結果だけリセット→すぐ再解析できる
       setResults(null)
       setError(null)
       setTextInput('')
       setPreviewUrl(null)
       setImageBase64(null)
+
+      // 保存後にAIアドバイスを取得
+      if (hasApiKey) {
+        setAdviceLoading(true)
+        setAdvice(null)
+        const savedLog = updatedLogs.find(
+          m => m.date === today && m.mealType === mealType
+        )
+        if (savedLog) {
+          getMealAdvice(savedLog, useAppStore.getState().data)
+            .then(a => { if (a) setAdvice(a) })
+            .finally(() => setAdviceLoading(false))
+        } else {
+          setAdviceLoading(false)
+        }
+      }
     } finally {
       setSaving(false)
     }
@@ -178,6 +196,25 @@ export default function Meal() {
 
   return (
     <div className="p-4 space-y-4">
+
+      {/* AIアドバイス */}
+      {(adviceLoading || advice) && (
+        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4 flex gap-3">
+          <Sparkles size={18} className="text-green-500 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-green-700 mb-1">AI アドバイス</p>
+            {adviceLoading
+              ? <p className="text-sm text-gray-400 animate-pulse">アドバイスを生成中...</p>
+              : <p className="text-sm text-gray-700">{advice}</p>
+            }
+          </div>
+          {advice && (
+            <button onClick={() => setAdvice(null)} className="text-gray-300 hover:text-gray-400 shrink-0">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 今日の栄養サマリー */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">

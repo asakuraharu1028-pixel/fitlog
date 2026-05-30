@@ -4,9 +4,11 @@ import {
   CARDIO_DB, STRENGTH_DB,
   calcCardioCalories, calcStrengthCalories, calcVolume, calcTreadmillMet,
 } from '../lib/exercisedb'
+import { getCardioAdvice, getStrengthAdvice } from '../lib/advice'
+import { getApiKey } from '../lib/gemini'
 import type { CardioLog, StrengthLog } from '../types'
 import { nanoid } from 'nanoid'
-import { Plus, Trash2, ChevronDown, ChevronUp, Flame, Dumbbell } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, ChevronUp, Flame, Dumbbell, Sparkles, X } from 'lucide-react'
 
 type Tab = 'cardio' | 'strength'
 const CATEGORIES = ['全身', '胸', '背中', '肩', '腕', '脚', '体幹'] as const
@@ -35,6 +37,9 @@ export default function Exercise() {
   const isSeconds = selectedStrength.unit === 'seconds'
   const [strengthSaving, setStrengthSaving] = useState(false)
   const [strengthSaved, setStrengthSaved] = useState(false)
+  const [advice, setAdvice] = useState<string | null>(null)
+  const [adviceLoading, setAdviceLoading] = useState(false)
+  const hasApiKey = !!getApiKey()
 
   // 展開
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -71,6 +76,13 @@ export default function Exercise() {
       setCardioSaved(true)
       setDurationMin('30')
       setTimeout(() => setCardioSaved(false), 2000)
+
+      if (hasApiKey) {
+        setAdvice(null); setAdviceLoading(true)
+        getCardioAdvice(log, useAppStore.getState().data)
+          .then(a => { if (a) setAdvice(a) })
+          .finally(() => setAdviceLoading(false))
+      }
     } finally {
       setCardioSaving(false)
     }
@@ -92,6 +104,13 @@ export default function Exercise() {
       setStrengthSaved(true)
       setSets([{ weight: 0, reps: 10 }])
       setTimeout(() => setStrengthSaved(false), 2000)
+
+      if (hasApiKey) {
+        setAdvice(null); setAdviceLoading(true)
+        getStrengthAdvice(log, useAppStore.getState().data)
+          .then(a => { if (a) setAdvice(a) })
+          .finally(() => setAdviceLoading(false))
+      }
     } finally {
       setStrengthSaving(false)
     }
@@ -120,6 +139,25 @@ export default function Exercise() {
 
   return (
     <div className="p-4 space-y-4">
+
+      {/* AIアドバイス */}
+      {(adviceLoading || advice) && (
+        <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-4 flex gap-3">
+          <Sparkles size={18} className="text-orange-500 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-orange-700 mb-1">AI アドバイス</p>
+            {adviceLoading
+              ? <p className="text-sm text-gray-400 animate-pulse">アドバイスを生成中...</p>
+              : <p className="text-sm text-gray-700">{advice}</p>
+            }
+          </div>
+          {advice && (
+            <button onClick={() => setAdvice(null)} className="text-gray-300 hover:text-gray-400 shrink-0">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 今日のサマリー */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
