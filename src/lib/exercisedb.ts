@@ -2,7 +2,15 @@
 export interface CardioExercise {
   id: string
   name: string
-  met: number // 代謝当量
+  met: number // 代謝当量（treadmillIncline=true の場合は動的計算するため0）
+  treadmillIncline?: boolean
+}
+
+// トレッドミル傾斜あり MET 計算（ACSM 式）
+export function calcTreadmillMet(speedKmh: number, inclinePct: number): number {
+  const speedMperMin = speedKmh * 1000 / 60
+  const vo2 = 0.1 * speedMperMin + 1.8 * speedMperMin * (inclinePct / 100) + 3.5
+  return Math.round((vo2 / 3.5) * 10) / 10
 }
 
 export const CARDIO_DB: CardioExercise[] = [
@@ -27,6 +35,7 @@ export const CARDIO_DB: CardioExercise[] = [
   { id: 'radio_taiso',   name: 'ラジオ体操',               met: 4.0 },
   { id: 'hiit',          name: 'HIIT',                     met: 12.0 },
   { id: 'elliptical',    name: 'エリプティカル',           met: 5.0 },
+  { id: 'treadmill_incline', name: 'トレッドミル（傾斜あり）', met: 0, treadmillIncline: true },
   { id: 'stair',         name: '階段昇降',                 met: 8.0 },
   { id: 'tennis',        name: 'テニス',                   met: 7.3 },
   { id: 'badminton',     name: 'バドミントン',             met: 5.5 },
@@ -50,6 +59,7 @@ export interface StrengthExercise {
 
 export const STRENGTH_DB: StrengthExercise[] = [
   // 胸
+  { id: 'chest_press',    name: 'チェストプレス',         category: '胸',   metPerMin: 5.0, unit: 'reps' },
   { id: 'wall_push_up',   name: 'ウォールプッシュアップ', category: '胸',   metPerMin: 2.5, unit: 'reps' },
   { id: 'knee_push_up',   name: '膝つきプッシュアップ',   category: '胸',   metPerMin: 3.0, unit: 'reps' },
   { id: 'push_up',        name: 'プッシュアップ',         category: '胸',   metPerMin: 3.8, unit: 'reps' },
@@ -78,6 +88,8 @@ export const STRENGTH_DB: StrengthExercise[] = [
   { id: 'leg_curl',       name: 'レッグカール',           category: '脚',   metPerMin: 3.5, unit: 'reps' },
   { id: 'leg_extension',  name: 'レッグエクステンション', category: '脚',   metPerMin: 3.5, unit: 'reps' },
   { id: 'calf_raise',     name: 'カーフレイズ',           category: '脚',   metPerMin: 3.0, unit: 'reps' },
+  { id: 'abduction',      name: 'アブダクション',         category: '脚',   metPerMin: 3.0, unit: 'reps' },
+  { id: 'adduction',      name: 'アダクション',           category: '脚',   metPerMin: 3.0, unit: 'reps' },
   // 体幹
   { id: 'knee_plank',     name: '膝プランク',             category: '体幹', metPerMin: 2.5, unit: 'seconds' },
   { id: 'plank',          name: 'プランク',               category: '体幹', metPerMin: 3.5, unit: 'seconds' },

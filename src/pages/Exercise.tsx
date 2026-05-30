@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAppStore } from '../lib/store'
 import {
   CARDIO_DB, STRENGTH_DB,
-  calcCardioCalories, calcStrengthCalories, calcVolume,
+  calcCardioCalories, calcStrengthCalories, calcVolume, calcTreadmillMet,
 } from '../lib/exercisedb'
 import type { CardioLog, StrengthLog } from '../types'
 import { nanoid } from 'nanoid'
@@ -21,6 +21,8 @@ export default function Exercise() {
   // 有酸素
   const [cardioId, setCardioId] = useState(CARDIO_DB[1].id)
   const [durationMin, setDurationMin] = useState('30')
+  const [treadmillSpeed, setTreadmillSpeed] = useState('5.0')
+  const [treadmillIncline, setTreadmillIncline] = useState('5')
   const [cardioSaving, setCardioSaving] = useState(false)
   const [cardioSaved, setCardioSaved] = useState(false)
 
@@ -51,13 +53,19 @@ export default function Exercise() {
     if (!dur || dur <= 0) return
     setCardioSaving(true)
     try {
+      const met = isTreadmillIncline
+        ? calcTreadmillMet(parseFloat(treadmillSpeed) || 0, parseFloat(treadmillIncline) || 0)
+        : exercise.met
+      const name = isTreadmillIncline
+        ? `${exercise.name}（${treadmillSpeed}km/h・${treadmillIncline}%）`
+        : exercise.name
       const log: CardioLog = {
         id: nanoid(),
         date: today,
-        name: exercise.name,
+        name,
         durationMin: dur,
-        met: exercise.met,
-        caloriesBurned: calcCardioCalories(exercise.met, bodyWeight, dur),
+        met,
+        caloriesBurned: calcCardioCalories(met, bodyWeight, dur),
       }
       await saveData({ cardioLogs: [...data.cardioLogs, log] })
       setCardioSaved(true)
@@ -99,7 +107,11 @@ export default function Exercise() {
 
   // 選択中の有酸素プレビュー
   const selectedCardio = CARDIO_DB.find((c) => c.id === cardioId)!
-  const previewCalories = calcCardioCalories(selectedCardio.met, bodyWeight, parseInt(durationMin) || 0)
+  const isTreadmillIncline = !!selectedCardio.treadmillIncline
+  const effectiveMet = isTreadmillIncline
+    ? calcTreadmillMet(parseFloat(treadmillSpeed) || 0, parseFloat(treadmillIncline) || 0)
+    : selectedCardio.met
+  const previewCalories = calcCardioCalories(effectiveMet, bodyWeight, parseInt(durationMin) || 0)
 
   // 筋トレフィルター
   const filteredStrength = STRENGTH_DB.filter(
@@ -156,6 +168,23 @@ export default function Exercise() {
               </select>
             </label>
 
+            {isTreadmillIncline && (
+              <div className="flex gap-2">
+                <label className="block flex-1">
+                  <span className="text-sm text-gray-500">時速（km/h）</span>
+                  <input type="number" value={treadmillSpeed} step="0.5" min="1"
+                    onChange={(e) => setTreadmillSpeed(e.target.value)}
+                    className="mt-1 block w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                </label>
+                <label className="block flex-1">
+                  <span className="text-sm text-gray-500">傾斜（%）</span>
+                  <input type="number" value={treadmillIncline} step="0.5" min="0" max="30"
+                    onChange={(e) => setTreadmillIncline(e.target.value)}
+                    className="mt-1 block w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
+                </label>
+              </div>
+            )}
+
             <label className="block">
               <span className="text-sm text-gray-500">時間（分）</span>
               <input type="number" value={durationMin} onChange={(e) => setDurationMin(e.target.value)}
@@ -166,7 +195,10 @@ export default function Exercise() {
             <div className="bg-orange-50 rounded-xl px-4 py-3 flex justify-between items-center">
               <div className="text-sm text-gray-600">
                 <p>{selectedCardio.name}</p>
-                <p className="text-xs text-gray-400">{durationMin}分 × 体重{bodyWeight}kg</p>
+                <p className="text-xs text-gray-400">
+                  {durationMin}分 × 体重{bodyWeight}kg
+                  {isTreadmillIncline && ` · MET: ${effectiveMet}`}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-2xl font-bold text-orange-500">{previewCalories}</p>
