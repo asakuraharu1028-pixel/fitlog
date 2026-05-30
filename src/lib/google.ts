@@ -1,32 +1,37 @@
+import { Capacitor } from '@capacitor/core'
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth'
+
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
+const ANDROID_CLIENT_ID = '685129420203-dufioist84icrt495iahbbqh67b76p6p.apps.googleusercontent.com'
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata'
 const FILE_NAME = 'fitlog-data.json'
 
 let tokenClient: google.accounts.oauth2.TokenClient | null = null
 let accessToken: string | null = null
 
-export function initGoogleAuth(): Promise<void> {
-  return new Promise((resolve) => {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      callback: (response) => {
-        if (response.access_token) {
-          accessToken = response.access_token
-        }
-      },
+const isNative = Capacitor.isNativePlatform()
+
+// ── Android (Native) ──────────────────────────────────────────
+export async function initGoogleAuth(): Promise<void> {
+  if (isNative) {
+    await GoogleAuth.initialize({
+      clientId: ANDROID_CLIENT_ID,
+      scopes: [SCOPES],
+      grantOfflineAccess: true,
     })
-    resolve()
-  })
+  }
 }
 
-export function requestAccessToken(): Promise<string> {
+export async function requestAccessToken(): Promise<string> {
+  if (isNative) {
+    const user = await GoogleAuth.signIn()
+    const token = user.authentication.accessToken
+    accessToken = token
+    return token
+  }
+
+  // ── Web ──────────────────────────────────────────────────────
   return new Promise((resolve, reject) => {
-    if (!tokenClient) {
-      reject(new Error('Token client not initialized'))
-      return
-    }
-    // re-init with updated callback
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
@@ -47,7 +52,12 @@ export function getAccessToken() {
   return accessToken
 }
 
-async function driveRequest(path: string, options: RequestInit = {}) {
+export function setAccessToken(token: string) {
+  accessToken = token
+}
+
+// ── Drive API ─────────────────────────────────────────────────
+async function driveRequest(path: string, options: RequestInit = {}, retry = true): Promise<Response> {
   if (!accessToken) throw new Error('Not authenticated')
   const res = await fetch(`https://www.googleapis.com/drive/v3${path}`, {
     ...options,
@@ -56,7 +66,16 @@ async function driveRequest(path: string, options: RequestInit = {}) {
       ...(options.headers || {}),
     },
   })
-  if (!res.ok) throw new Error(`Drive API error: ${res.status}`)
+  if (res.status === 401 && retry && !isNative) {
+    // トークン期限切れ → 再取得してリトライ
+    accessToken = null
+    await requestAccessToken()
+    return driveRequest(path, options, false)
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Drive API error: ${res.status} - ${body}`)
+  }
   return res
 }
 
