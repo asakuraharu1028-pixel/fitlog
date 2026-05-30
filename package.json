@@ -14,6 +14,7 @@
     "@capacitor/android": "^8.3.4",
     "@capacitor/cli": "^8.3.4",
     "@capacitor/core": "^8.3.4",
+    "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@types/gapi": "^0.0.47",
     "@types/google.accounts": "^0.0.18",
     "cross-env": "^10.1.0",
