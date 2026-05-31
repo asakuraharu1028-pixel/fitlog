@@ -37,6 +37,7 @@ function toFoodEntry(r: AiFoodResult): FoodEntry {
     protein: r.protein,
     fat: r.fat,
     carbs: r.carbs,
+    sodium: r.na,
   }
 }
 

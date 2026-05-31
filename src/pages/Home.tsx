@@ -1,4 +1,8 @@
+import { useState } from 'react'
 import { useAppStore } from '../lib/store'
+import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
+import { getApiKey } from '../lib/gemini'
+import { Sparkles, RefreshCw, Moon } from 'lucide-react'
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -8,24 +12,60 @@ export default function Home() {
   const { data } = useAppStore()
   const today = todayStr()
 
-  const todayBody = data.bodyRecords.find((r) => r.date === today)
-  const todayMeals = data.mealLogs.filter((m) => m.date === today)
-  const todayCardio = data.cardioLogs.filter((c) => c.date === today)
+  const todayBody     = data.bodyRecords.find((r) => r.date === today)
+  const todayMeals    = data.mealLogs.filter((m) => m.date === today)
+  const todayCardio   = data.cardioLogs.filter((c) => c.date === today)
   const todayStrength = data.strengthLogs.filter((s) => s.date === today)
+  const todaySleep    = (data.sleepLogs ?? []).filter((s) => s.date === today)
 
   const totalCaloriesIn = todayMeals.reduce(
-    (sum, m) => sum + m.entries.reduce((s, e) => s + e.calories, 0),
-    0
+    (sum, m) => sum + m.entries.reduce((s, e) => s + e.calories, 0), 0
   )
   const totalCaloriesOut =
     todayCardio.reduce((sum, c) => sum + c.caloriesBurned, 0) +
     todayStrength.reduce((sum, s) => sum + (s.estimatedCalories ?? 0), 0)
 
-  const goal = data.settings.goalCalories ?? 2000
+  // 今日の合計PFC・塩分
+  const allEntries = todayMeals.flatMap(m => m.entries)
+  const totalProtein = allEntries.reduce((s, e) => s + e.protein, 0)
+  const totalFat     = allEntries.reduce((s, e) => s + e.fat, 0)
+  const totalCarbs   = allEntries.reduce((s, e) => s + e.carbs, 0)
+  const totalSodium  = allEntries.reduce((s, e) => s + (e.sodium ?? 0), 0)
+  const totalSaltG   = totalSodium * 2.54 / 1000 // ナトリウム→食塩相当量
+
+  // 睡眠合計
+  const totalSleepMin = todaySleep.reduce((s, r) => s + r.durationMin, 0)
+
+  const goal      = data.settings.goalCalories ?? 2000
   const remaining = goal - totalCaloriesIn + totalCaloriesOut
+
+  const hasApiKey = !!getApiKey()
+
+  // アドバイス
+  const [dailyAdvice,   setDailyAdvice]   = useState<string | null>(null)
+  const [weeklyAdvice,  setWeeklyAdvice]  = useState<string | null>(null)
+  const [adviceLoading, setAdviceLoading] = useState(false)
+
+  const handleAdvice = async () => {
+    setAdviceLoading(true)
+    setDailyAdvice(null)
+    setWeeklyAdvice(null)
+    try {
+      const [d, w] = await Promise.all([
+        getDailyAdvice(data),
+        getWeeklyAdvice(data),
+      ])
+      setDailyAdvice(d || null)
+      setWeeklyAdvice(w || null)
+    } finally {
+      setAdviceLoading(false)
+    }
+  }
 
   return (
     <div className="p-4 space-y-4">
+
+      {/* 日付 */}
       <div className="text-center py-2">
         <p className="text-sm text-gray-500">
           {new Date().toLocaleDateString('ja-JP', {
@@ -38,24 +78,10 @@ export default function Home() {
       <div className="bg-white rounded-2xl p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-gray-500 mb-3">今日のカロリー</h2>
         <div className="flex justify-around text-center">
-          <div>
-            <p className="text-2xl font-bold text-blue-500">{goal}</p>
-            <p className="text-xs text-gray-400">目標</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-green-500">{totalCaloriesIn}</p>
-            <p className="text-xs text-gray-400">摂取</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-orange-500">{totalCaloriesOut}</p>
-            <p className="text-xs text-gray-400">消費</p>
-          </div>
-          <div>
-            <p className={`text-2xl font-bold ${remaining >= 0 ? 'text-gray-700' : 'text-red-500'}`}>
-              {remaining}
-            </p>
-            <p className="text-xs text-gray-400">残り</p>
-          </div>
+          <Stat label="目標"   value={String(goal)}            color="text-blue-500" />
+          <Stat label="摂取"   value={String(totalCaloriesIn)} color="text-green-500" />
+          <Stat label="消費"   value={String(totalCaloriesOut)} color="text-orange-500" />
+          <Stat label="残り"   value={String(remaining)}        color={remaining >= 0 ? 'text-gray-700' : 'text-red-500'} />
         </div>
       </div>
 
@@ -64,44 +90,151 @@ export default function Home() {
         <h2 className="text-sm font-semibold text-gray-500 mb-2">今日の体重</h2>
         {todayBody ? (
           <div className="flex gap-4">
-            <Stat label="体重" value={`${todayBody.weight.toFixed(2)} kg`} />
-            {todayBody.bodyFatPct != null && (
-              <Stat label="体脂肪率" value={`${todayBody.bodyFatPct} %`} />
-            )}
-            {todayBody.bmi != null && (
-              <Stat label="BMI" value={String(todayBody.bmi)} />
-            )}
+            <StatText label="体重"   value={`${todayBody.weight.toFixed(2)} kg`} />
+            {todayBody.bodyFatPct != null && <StatText label="体脂肪率" value={`${todayBody.bodyFatPct} %`} />}
+            {todayBody.bmi        != null && <StatText label="BMI"      value={String(todayBody.bmi)} />}
           </div>
         ) : (
           <p className="text-gray-400 text-sm">未記録</p>
         )}
       </div>
 
+      {/* 睡眠 */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
+          <Moon size={14} className="text-indigo-400" /> 今日の睡眠
+        </h2>
+        {totalSleepMin > 0 ? (
+          <div className="flex items-end gap-1">
+            <span className="text-2xl font-bold text-indigo-500">
+              {Math.floor(totalSleepMin / 60)}
+            </span>
+            <span className="text-sm text-gray-400 mb-0.5">時間</span>
+            <span className="text-2xl font-bold text-indigo-500 ml-1">
+              {totalSleepMin % 60}
+            </span>
+            <span className="text-sm text-gray-400 mb-0.5">分</span>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm">未記録（Health Connect から同期できます）</p>
+        )}
+      </div>
+
       {/* 今日の食事 */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-500 mb-2">今日の食事</h2>
+        <h2 className="text-sm font-semibold text-gray-500 mb-3">今日の食事</h2>
         {todayMeals.length === 0 ? (
           <p className="text-gray-400 text-sm">未記録</p>
         ) : (
-          <ul className="space-y-1">
-            {todayMeals.map((m) => {
-              const cal = m.entries.reduce((s, e) => s + e.calories, 0)
-              const label = { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }[m.mealType]
-              return (
-                <li key={m.id} className="flex justify-between text-sm">
-                  <span className="text-gray-600">{label}</span>
-                  <span className="font-medium">{cal} kcal</span>
-                </li>
-              )
-            })}
-          </ul>
+          <>
+            <div className="space-y-3">
+              {todayMeals.map((m) => {
+                const cal  = m.entries.reduce((s, e) => s + e.calories, 0)
+                const prot = m.entries.reduce((s, e) => s + e.protein, 0)
+                const fat  = m.entries.reduce((s, e) => s + e.fat, 0)
+                const carb = m.entries.reduce((s, e) => s + e.carbs, 0)
+                const salt = m.entries.reduce((s, e) => s + (e.sodium ?? 0), 0) * 2.54 / 1000
+                const label = { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }[m.mealType]
+                return (
+                  <div key={m.id} className="border border-gray-100 rounded-xl p-3">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-sm font-semibold text-gray-700">{label}</span>
+                      <span className="text-sm font-bold text-green-600">{cal} kcal</span>
+                    </div>
+                    {/* 食品一覧 */}
+                    <ul className="text-xs text-gray-500 mb-2 space-y-0.5">
+                      {m.entries.map((e, i) => (
+                        <li key={i} className="flex justify-between">
+                          <span>{e.foodName}（{e.grams}g）</span>
+                          <span>{e.calories}kcal</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {/* PFC + 塩分 */}
+                    <div className="flex gap-3 text-xs text-gray-500 pt-1.5 border-t border-gray-50">
+                      <span>P <b className="text-blue-500">{prot.toFixed(1)}g</b></span>
+                      <span>F <b className="text-yellow-500">{fat.toFixed(1)}g</b></span>
+                      <span>C <b className="text-orange-500">{carb.toFixed(1)}g</b></span>
+                      <span>塩分 <b className="text-red-400">{salt.toFixed(1)}g</b></span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* 1日合計PFC */}
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs text-gray-400 mb-1.5">本日合計</p>
+              <div className="flex gap-4 text-sm">
+                <span>P <b className="text-blue-500">{totalProtein.toFixed(1)}g</b></span>
+                <span>F <b className="text-yellow-500">{totalFat.toFixed(1)}g</b></span>
+                <span>C <b className="text-orange-500">{totalCarbs.toFixed(1)}g</b></span>
+                <span>塩分 <b className="text-red-400">{totalSaltG.toFixed(1)}g</b></span>
+              </div>
+            </div>
+          </>
         )}
       </div>
+
+      {/* AIアドバイス */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-gray-500 flex items-center gap-1.5">
+            <Sparkles size={14} className="text-purple-400" /> アドバイス
+          </h2>
+          {hasApiKey && (
+            <button
+              onClick={handleAdvice}
+              disabled={adviceLoading}
+              className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-700 disabled:opacity-40 transition"
+            >
+              <RefreshCw size={12} className={adviceLoading ? 'animate-spin' : ''} />
+              {adviceLoading ? '生成中...' : '今すぐ取得'}
+            </button>
+          )}
+        </div>
+
+        {!hasApiKey && (
+          <p className="text-xs text-gray-400">設定ページでAPIキーを設定するとアドバイスが表示されます</p>
+        )}
+
+        {hasApiKey && !dailyAdvice && !weeklyAdvice && !adviceLoading && (
+          <p className="text-xs text-gray-400">「今すぐ取得」を押すとAIがアドバイスします</p>
+        )}
+
+        {adviceLoading && (
+          <p className="text-sm text-gray-400 animate-pulse">アドバイスを生成中...</p>
+        )}
+
+        {dailyAdvice && (
+          <div className="mb-3">
+            <p className="text-xs font-semibold text-purple-600 mb-1">📅 今日の総括</p>
+            <p className="text-sm text-gray-700 whitespace-pre-line">{dailyAdvice}</p>
+          </div>
+        )}
+
+        {weeklyAdvice && (
+          <div className={dailyAdvice ? 'pt-3 border-t border-gray-100' : ''}>
+            <p className="text-xs font-semibold text-indigo-600 mb-1">📊 今週の総括</p>
+            <p className="text-sm text-gray-700 whitespace-pre-line">{weeklyAdvice}</p>
+          </div>
+        )}
+      </div>
+
     </div>
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="text-center">
+      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      <p className="text-xs text-gray-400">{label}</p>
+    </div>
+  )
+}
+
+function StatText({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-lg font-bold text-gray-800">{value}</p>

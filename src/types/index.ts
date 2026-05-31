@@ -28,6 +28,7 @@ export interface FoodEntry {
   protein: number
   fat: number
   carbs: number
+  sodium?: number // ナトリウム mg
 }
 
 export interface MealLog {
@@ -59,11 +60,20 @@ export interface StrengthLog {
   estimatedCalories?: number
 }
 
+export interface SleepLog {
+  id: string
+  date: string       // YYYY-MM-DD（就寝日）
+  startTime: string  // ISO8601
+  endTime: string    // ISO8601
+  durationMin: number
+}
+
 export interface AppData {
   bodyRecords: BodyRecord[]
   mealLogs: MealLog[]
   cardioLogs: CardioLog[]
   strengthLogs: StrengthLog[]
+  sleepLogs: SleepLog[]
   settings: {
     heightCm: number
     goalWeightKg?: number

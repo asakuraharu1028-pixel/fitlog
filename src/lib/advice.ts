@@ -1,5 +1,5 @@
 import { getApiKey } from './gemini'
-import type { MealLog, CardioLog, StrengthLog, AppData } from '../types'
+import type { MealLog, CardioLog, StrengthLog, AppData, SleepLog } from '../types'
 
 function isOpenRouterKey(key: string) {
   return key.startsWith('sk-or-')
@@ -90,7 +90,9 @@ export async function getCardioAdvice(log: CardioLog, data: AppData): Promise<st
   return callAI(prompt)
 }
 
-export async function getStrengthAdvice(log: StrengthLog, data: AppData): Promise<string> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function getStrengthAdvice(log: StrengthLog, _data: AppData): Promise<string> {
   const apiKey = getApiKey()
   if (!apiKey) return ''
 
@@ -100,6 +102,73 @@ export async function getStrengthAdvice(log: StrengthLog, data: AppData): Promis
 筋トレ「${log.name}」を行いました。${setsStr}
 推定消費：${log.estimatedCalories ?? 0}kcal
 このトレーニング内容に対するフォームや改善点、次回へのアドバイスをしてください。`
+
+  return callAI(prompt)
+}
+
+// ── 日次・週次アドバイス ──────────────────────────────────────
+
+function dayStats(data: AppData, date: string) {
+  const meals = data.mealLogs.filter(m => m.date === date)
+  const entries = meals.flatMap(m => m.entries)
+  const calories = entries.reduce((s, e) => s + e.calories, 0)
+  const protein  = entries.reduce((s, e) => s + e.protein, 0)
+  const fat      = entries.reduce((s, e) => s + e.fat, 0)
+  const carbs    = entries.reduce((s, e) => s + e.carbs, 0)
+  const sodium   = entries.reduce((s, e) => s + (e.sodium ?? 0), 0)
+  const burned   = data.cardioLogs.filter(c => c.date === date).reduce((s, c) => s + c.caloriesBurned, 0)
+    + data.strengthLogs.filter(s => s.date === date).reduce((s, t) => s + (t.estimatedCalories ?? 0), 0)
+  const sleep    = (data.sleepLogs ?? []).filter(s => s.date === date).reduce((s, r) => s + r.durationMin, 0)
+  return { calories, protein, fat, carbs, sodium, burned, sleep }
+}
+
+export async function getDailyAdvice(data: AppData): Promise<string> {
+  if (!getApiKey()) return ''
+  const today = new Date().toISOString().slice(0, 10)
+  const s = dayStats(data, today)
+  const goal = data.settings.goalCalories ?? 2000
+
+  const prompt = `今日（${today}）の健康データを総括してください。
+摂取カロリー: ${s.calories}kcal（目標: ${goal}kcal）
+PFC: タンパク質${s.protein.toFixed(1)}g / 脂質${s.fat.toFixed(1)}g / 炭水化物${s.carbs.toFixed(1)}g
+塩分相当量: ${(s.sodium * 2.54 / 1000).toFixed(1)}g（目安: 男性7.5g未満、女性6.5g未満）
+消費カロリー: ${s.burned}kcal
+睡眠: ${s.sleep > 0 ? `${Math.floor(s.sleep / 60)}時間${s.sleep % 60}分` : '未記録'}
+今日の改善点や明日への具体的なアドバイスを3点、箇条書きで短く教えてください。`
+
+  return callAI(prompt)
+}
+
+export async function getWeeklyAdvice(data: AppData): Promise<string> {
+  if (!getApiKey()) return ''
+  const today = new Date()
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    return d.toISOString().slice(0, 10)
+  })
+
+  const stats = days.map(d => ({ date: d, ...dayStats(data, d) })).filter(s => s.calories > 0)
+  if (stats.length === 0) return ''
+
+  const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0
+  const avgCal     = avg(stats.map(s => s.calories))
+  const avgProtein = avg(stats.map(s => s.protein))
+  const avgFat     = avg(stats.map(s => s.fat))
+  const avgCarbs   = avg(stats.map(s => s.carbs))
+  const avgSodium  = avg(stats.map(s => s.sodium))
+  const avgBurned  = avg(stats.map(s => s.burned))
+  const avgSleep   = avg(stats.map(s => s.sleep).filter(s => s > 0))
+  const exerciseDays = stats.filter(s => s.burned > 0).length
+
+  const prompt = `過去7日間の健康データを週次総括してください（記録: ${stats.length}日）。
+1日平均摂取カロリー: ${avgCal}kcal
+平均PFC: タンパク質${avgProtein}g / 脂質${avgFat}g / 炭水化物${avgCarbs}g
+平均塩分相当量: ${(avgSodium * 2.54 / 1000).toFixed(1)}g
+平均消費カロリー: ${avgBurned}kcal
+運動した日数: ${exerciseDays}/7日
+平均睡眠: ${avgSleep > 0 ? `${Math.floor(avgSleep / 60)}時間${avgSleep % 60}分` : '未記録'}
+1週間の傾向と来週への具体的な改善提案を3点、箇条書きで短く教えてください。`
 
   return callAI(prompt)
 }
