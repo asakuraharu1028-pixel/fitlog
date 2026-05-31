@@ -9,8 +9,10 @@ const DEFAULT_DATA: AppData = {
   mealLogs: [],
   cardioLogs: [],
   strengthLogs: [],
+  sleepLogs: [],
   settings: { heightCm: 170 },
 }
+
 
 function isValidAppData(d: unknown): d is AppData {
   return !!d && typeof d === 'object' && Array.isArray((d as AppData).bodyRecords)

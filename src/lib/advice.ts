@@ -1,5 +1,5 @@
 import { getApiKey } from './gemini'
-import type { MealLog, CardioLog, StrengthLog, AppData, SleepLog } from '../types'
+import type { MealLog, CardioLog, StrengthLog, AppData } from '../types'
 
 function isOpenRouterKey(key: string) {
   return key.startsWith('sk-or-')
