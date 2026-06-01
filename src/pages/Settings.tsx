@@ -3,13 +3,14 @@ import { useAppStore } from '../lib/store'
 import { getApiKey, setApiKey } from '../lib/gemini'
 import { loadFromDrive, saveToDrive, getAccessToken } from '../lib/google'
 import { localDateStr } from '../lib/utils'
+import type { BodyRecord } from '../types'
+import { isNative } from '../lib/auth'
 import {
   hcCheckAvailability, hcCheckPermissions, hcOpenPermissions,
   hcReadSteps, hcReadWeight, hcWriteWeight,
   hcReadBodyFat, hcWriteBodyFat,
   hcReadSleep,
 } from '../lib/healthconnect'
-import { isNative } from '../lib/auth'
 import { nanoid } from 'nanoid'
 import { Eye, EyeOff } from 'lucide-react'
 
@@ -266,9 +267,9 @@ export default function Settings() {
                 logs.push(`✓ 体重: ${weights.length}件`)
                 const { data: appData, saveData } = useAppStore.getState()
                 const existingDates = new Set(appData.bodyRecords.map(r => r.date))
-                const newRecords = weights
-                  .filter(w => !existingDates.has(w.date))
-                  .map(w => {
+                const newRecords: BodyRecord[] = weights
+                  .filter((w: { date: string; weightKg: number }) => !existingDates.has(w.date))
+                  .map((w: { date: string; weightKg: number }) => {
                     const h = appData.settings.heightCm / 100
                     const bmi = Math.round(w.weightKg / (h * h) * 10) / 10
                     return { id: nanoid(), date: w.date, weight: w.weightKg, bmi }
@@ -293,10 +294,10 @@ export default function Settings() {
                 logs.push(`✓ 体脂肪率: ${bodyFats.length}件`)
                 if (bodyFats.length > 0) {
                   const { data: bfData, saveData: bfSave } = useAppStore.getState()
-                  const bfByDate = new Map(bodyFats.map(b => [b.date, Math.round(b.bodyFatPct * 100) / 100]))
-                  const updatedRecords = bfData.bodyRecords.map(r =>
+                  const bfByDate = new Map(bodyFats.map((b: { date: string; bodyFatPct: number }) => [b.date, Math.round(b.bodyFatPct * 100) / 100]))
+                  const updatedRecords: BodyRecord[] = bfData.bodyRecords.map(r =>
                     bfByDate.has(r.date)
-                      ? { ...r, bodyFatPct: bfByDate.get(r.date) }
+                      ? { ...r, bodyFatPct: bfByDate.get(r.date) as number }
                       : r
                   )
                   await bfSave({ bodyRecords: updatedRecords })
@@ -320,10 +321,10 @@ export default function Settings() {
                 const sleeps = await hcReadSleep(past30, today)
                 logs.push(`✓ 睡眠: ${sleeps.length}件`)
                 const { data: latestData } = useAppStore.getState()
-                const existingSleepDates = new Set((latestData.sleepLogs ?? []).map(s => s.date))
+                const existingSleepDates = new Set((latestData.sleepLogs ?? []).map((s: { date: string }) => s.date))
                 const newSleeps = sleeps
-                  .filter(s => !existingSleepDates.has(s.date))
-                  .map(s => ({ id: nanoid(), ...s }))
+                  .filter((s: { date: string }) => !existingSleepDates.has(s.date))
+                  .map((s: { date: string; startTime: string; endTime: string; durationMin: number }) => ({ id: nanoid(), ...s }))
                 if (newSleeps.length > 0) {
                   await saveData({ sleepLogs: [...(latestData.sleepLogs ?? []), ...newSleeps] })
                   logs.push(`✓ 睡眠 ${newSleeps.length}件を FitLog に追加`)
