@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '../lib/store'
 import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
 import { getApiKey } from '../lib/gemini'
@@ -10,7 +10,16 @@ function todayStr() {
 
 export default function Home() {
   const { data } = useAppStore()
-  const today = todayStr()
+  const [today, setToday] = useState(todayStr)
+
+  // 日付が変わったら today を更新（1分ごとにチェック）
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const newToday = todayStr()
+      setToday(prev => prev !== newToday ? newToday : prev)
+    }, 60_000)
+    return () => clearInterval(timer)
+  }, [])
 
   const todayBody     = data.bodyRecords.find((r) => r.date === today)
   const todayMeals    = data.mealLogs.filter((m) => m.date === today)
@@ -45,11 +54,13 @@ export default function Home() {
   const [dailyAdvice,   setDailyAdvice]   = useState<string | null>(null)
   const [weeklyAdvice,  setWeeklyAdvice]  = useState<string | null>(null)
   const [adviceLoading, setAdviceLoading] = useState(false)
+  const [adviceError,   setAdviceError]   = useState<string | null>(null)
 
   const handleAdvice = async () => {
     setAdviceLoading(true)
     setDailyAdvice(null)
     setWeeklyAdvice(null)
+    setAdviceError(null)
     try {
       const [d, w] = await Promise.all([
         getDailyAdvice(data),
@@ -57,6 +68,8 @@ export default function Home() {
       ])
       setDailyAdvice(d || null)
       setWeeklyAdvice(w || null)
+    } catch (e) {
+      setAdviceError(e instanceof Error ? e.message : String(e))
     } finally {
       setAdviceLoading(false)
     }
@@ -204,6 +217,10 @@ export default function Home() {
 
         {adviceLoading && (
           <p className="text-sm text-gray-400 animate-pulse">アドバイスを生成中...</p>
+        )}
+
+        {adviceError && (
+          <p className="text-xs text-red-500 break-all">✗ {adviceError}</p>
         )}
 
         {dailyAdvice && (

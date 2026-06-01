@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core'
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
-const ANDROID_CLIENT_ID = '685129420203-dufioist84icrt495iahbbqh67b76p6p.apps.googleusercontent.com'
+
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata'
 const FILE_NAME = 'fitlog-data.json'
 
@@ -15,7 +15,7 @@ const isNative = Capacitor.isNativePlatform()
 export async function initGoogleAuth(): Promise<void> {
   if (isNative) {
     await GoogleAuth.initialize({
-      clientId: ANDROID_CLIENT_ID,
+      clientId: CLIENT_ID, // Web クライアントID（Android は google-services.json が処理）
       scopes: [SCOPES],
       grantOfflineAccess: true,
     })
