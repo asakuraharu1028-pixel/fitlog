@@ -1,4 +1,5 @@
 import { getApiKey } from './gemini'
+import { localDateStr } from './utils'
 import type { MealLog, CardioLog, StrengthLog, AppData } from '../types'
 
 function isOpenRouterKey(key: string) {
@@ -21,7 +22,10 @@ async function callAI(prompt: string): Promise<string> {
         ],
       }),
     })
-    if (!res.ok) return ''
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(`OpenRouter エラー ${res.status}: ${err?.error?.message ?? res.statusText}`)
+    }
     const data = await res.json()
     return (data.choices?.[0]?.message?.content ?? '').trim()
   }
@@ -35,13 +39,16 @@ async function callAI(prompt: string): Promise<string> {
       contents: [{ parts: [{ text: `健康管理アドバイザーとして短く具体的な日本語でアドバイスしてください（1〜2文）:\n${prompt}` }] }],
     }),
   })
-  if (!res.ok) return ''
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(`Gemini エラー ${res.status}: ${err?.error?.message ?? res.statusText}`)
+  }
   const data = await res.json()
   return (data.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
 }
 
 function todayCalorieSummary(data: AppData, goalCalories: number) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr()
   const intake = data.mealLogs
     .filter(m => m.date === today)
     .reduce((s, m) => s + m.entries.reduce((a, e) => a + e.calories, 0), 0)
@@ -124,7 +131,7 @@ function dayStats(data: AppData, date: string) {
 
 export async function getDailyAdvice(data: AppData): Promise<string> {
   if (!getApiKey()) return ''
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr()
   const s = dayStats(data, today)
   const goal = data.settings.goalCalories ?? 2000
 
@@ -145,7 +152,7 @@ export async function getWeeklyAdvice(data: AppData): Promise<string> {
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today)
     d.setDate(d.getDate() - i)
-    return d.toISOString().slice(0, 10)
+    return localDateStr(d)
   })
 
   const stats = days.map(d => ({ date: d, ...dayStats(data, d) })).filter(s => s.calories > 0)

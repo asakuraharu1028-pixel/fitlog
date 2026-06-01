@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { analyzeFoodText, analyzeFoodImage, getApiKey, type AiFoodResult } from '../lib/gemini'
 import { getMealAdvice } from '../lib/advice'
@@ -43,7 +44,7 @@ function toFoodEntry(r: AiFoodResult): FoodEntry {
 
 export default function Meal() {
   const { data, saveData } = useAppStore()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr()
 
   const [mealType, setMealType] = useState<MealType>('breakfast')
 

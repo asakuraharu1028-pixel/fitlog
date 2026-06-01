@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
+import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
 import { getApiKey } from '../lib/gemini'
 import { Sparkles, RefreshCw, Moon } from 'lucide-react'
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10)
+  return localDateStr()
 }
 
 export default function Home() {

@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react'
 import { useAppStore } from '../lib/store'
 import { getApiKey, setApiKey } from '../lib/gemini'
 import { loadFromDrive, saveToDrive, getAccessToken } from '../lib/google'
+import { localDateStr } from '../lib/utils'
+import {
+  hcCheckAvailability, hcCheckPermissions, hcOpenPermissions,
+  hcReadSteps, hcReadWeight, hcWriteWeight,
+  hcReadBodyFat, hcWriteBodyFat,
+  hcReadSleep,
+} from '../lib/healthconnect'
+import { isNative } from '../lib/auth'
+import { nanoid } from 'nanoid'
 import { Eye, EyeOff } from 'lucide-react'
 
 export default function Settings() {
@@ -16,6 +25,8 @@ export default function Settings() {
   const [apiKeySaved, setApiKeySaved] = useState(false)
   const [diagLog, setDiagLog] = useState<string[]>([])
   const [diagRunning, setDiagRunning] = useState(false)
+  const [hcLog, setHcLog] = useState<string[]>([])
+  const [hcRunning, setHcRunning] = useState(false)
 
   useEffect(() => {
     setHeight(String(data.settings.heightCm))
@@ -208,6 +219,137 @@ export default function Settings() {
           </div>
         )}
       </div>
+      {/* Health Connect 連携（Android のみ） */}
+      {isNative && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <h2 className="font-semibold text-gray-700 mb-1">Health Connect 連携</h2>
+          <p className="text-xs text-gray-400 mb-3">体重・体脂肪率・睡眠・歩数を Health Connect と同期します</p>
+          <button
+            onClick={async () => {
+              setHcRunning(true)
+              const logs: string[] = []
+              try {
+                const status = await hcCheckAvailability()
+                logs.push(`HC 状態: ${status}`)
+                if (status !== 'available') {
+                  logs.push('✗ Health Connect が利用できません')
+                  setHcLog(logs); setHcRunning(false); return
+                }
+
+                logs.push('パーミッション確認中...')
+                setHcLog([...logs])
+                let granted = await hcCheckPermissions()
+                if (!granted) {
+                  logs.push('パーミッション画面を開いています...')
+                  setHcLog([...logs])
+                  granted = await hcOpenPermissions()
+                }
+                if (!granted) {
+                  logs.push('✗ パーミッションが許可されませんでした')
+                  setHcLog(logs); setHcRunning(false); return
+                }
+                logs.push('✓ パーミッション許可済み')
+
+                const today = localDateStr()
+                const past30 = localDateStr(new Date(Date.now() - 30 * 86400000))
+
+                // 歩数を読み込み（表示のみ）
+                logs.push('歩数を読み込み中...')
+                setHcLog([...logs])
+                const steps = await hcReadSteps(past30, today)
+                logs.push(`✓ 歩数: ${steps.length}件`)
+
+                // 体重を HC から読み込んで FitLog に追加
+                logs.push('体重を HC から読み込み中...')
+                setHcLog([...logs])
+                const weights = await hcReadWeight(past30, today)
+                logs.push(`✓ 体重: ${weights.length}件`)
+                const { data: appData, saveData } = useAppStore.getState()
+                const existingDates = new Set(appData.bodyRecords.map(r => r.date))
+                const newRecords = weights
+                  .filter(w => !existingDates.has(w.date))
+                  .map(w => {
+                    const h = appData.settings.heightCm / 100
+                    const bmi = Math.round(w.weightKg / (h * h) * 10) / 10
+                    return { id: nanoid(), date: w.date, weight: w.weightKg, bmi }
+                  })
+                if (newRecords.length > 0) {
+                  await saveData({ bodyRecords: [...appData.bodyRecords, ...newRecords].sort((a, b) => a.date.localeCompare(b.date)) })
+                  logs.push(`✓ 体重 ${newRecords.length}件を FitLog に追加`)
+                }
+
+                // FitLog の体重を HC に書き込み
+                logs.push('FitLog の体重を HC に書き込み中...')
+                setHcLog([...logs])
+                for (const r of appData.bodyRecords.slice(-7)) {
+                  try { await hcWriteWeight(r.date, r.weight) } catch {}
+                }
+                logs.push('✓ 直近7日分の体重を HC に書き込み')
+
+                // 体脂肪率を HC から読み込んで FitLog に追加
+                logs.push('体脂肪率を HC から読み込み中...')
+                setHcLog([...logs])
+                const bodyFats = await hcReadBodyFat(past30, today)
+                logs.push(`✓ 体脂肪率: ${bodyFats.length}件`)
+                if (bodyFats.length > 0) {
+                  const { data: bfData, saveData: bfSave } = useAppStore.getState()
+                  const bfByDate = new Map(bodyFats.map(b => [b.date, Math.round(b.bodyFatPct * 100) / 100]))
+                  const updatedRecords = bfData.bodyRecords.map(r =>
+                    bfByDate.has(r.date)
+                      ? { ...r, bodyFatPct: bfByDate.get(r.date) }
+                      : r
+                  )
+                  await bfSave({ bodyRecords: updatedRecords })
+                  logs.push(`✓ 体脂肪率を FitLog に反映`)
+                }
+
+                // FitLog の体脂肪率を HC に書き込み
+                logs.push('FitLog の体脂肪率を HC に書き込み中...')
+                setHcLog([...logs])
+                const { data: bfWriteData } = useAppStore.getState()
+                for (const r of bfWriteData.bodyRecords.slice(-7)) {
+                  if (r.bodyFatPct != null) {
+                    try { await hcWriteBodyFat(r.date, r.bodyFatPct) } catch {}
+                  }
+                }
+                logs.push('✓ 直近7日分の体脂肪率を HC に書き込み')
+
+                // 睡眠を HC から読み込んで FitLog に追加
+                logs.push('睡眠を HC から読み込み中...')
+                setHcLog([...logs])
+                const sleeps = await hcReadSleep(past30, today)
+                logs.push(`✓ 睡眠: ${sleeps.length}件`)
+                const { data: latestData } = useAppStore.getState()
+                const existingSleepDates = new Set((latestData.sleepLogs ?? []).map(s => s.date))
+                const newSleeps = sleeps
+                  .filter(s => !existingSleepDates.has(s.date))
+                  .map(s => ({ id: nanoid(), ...s }))
+                if (newSleeps.length > 0) {
+                  await saveData({ sleepLogs: [...(latestData.sleepLogs ?? []), ...newSleeps] })
+                  logs.push(`✓ 睡眠 ${newSleeps.length}件を FitLog に追加`)
+                }
+
+                logs.push('🎉 同期完了！')
+              } catch (e) {
+                logs.push(`✗ エラー: ${e instanceof Error ? e.message : String(e)}`)
+              }
+              setHcLog(logs)
+              setHcRunning(false)
+            }}
+            disabled={hcRunning}
+            className="w-full bg-green-600 text-white rounded-xl py-2.5 font-semibold disabled:opacity-40"
+          >
+            {hcRunning ? '同期中...' : 'Health Connect と同期'}
+          </button>
+          {hcLog.length > 0 && (
+            <div className="mt-3 bg-gray-50 rounded-xl p-3 text-xs font-mono space-y-1">
+              {hcLog.map((l, i) => (
+                <p key={i} className={l.startsWith('✗') ? 'text-red-600' : l.includes('✓') || l.includes('🎉') ? 'text-green-600' : 'text-gray-600'}>{l}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

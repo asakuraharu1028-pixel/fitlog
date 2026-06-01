@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '../lib/store'
+import { localDateStr } from '../lib/utils'
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -16,7 +17,7 @@ function getDateRange(period: Period) {
   const dates: string[] = []
   const cur = new Date(start)
   while (cur <= end) {
-    dates.push(cur.toISOString().slice(0, 10))
+    dates.push(localDateStr(cur))
     cur.setDate(cur.getDate() + 1)
   }
   return dates

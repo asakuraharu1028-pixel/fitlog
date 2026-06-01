@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '../lib/store'
+import { localDateStr } from '../lib/utils'
 import {
   CARDIO_DB, STRENGTH_DB,
   calcCardioCalories, calcStrengthCalories, calcVolume, calcTreadmillMet,
@@ -15,7 +16,7 @@ const CATEGORIES = ['全身', '胸', '背中', '肩', '腕', '脚', '体幹'] as
 
 export default function Exercise() {
   const { data, saveData } = useAppStore()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr()
   const bodyWeight = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight ?? 60
 
   const [tab, setTab] = useState<Tab>('cardio')

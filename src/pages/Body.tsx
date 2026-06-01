@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '../lib/store'
+import { localDateStr } from '../lib/utils'
 import type { BodyRecord } from '../types'
 import { nanoid } from 'nanoid'
 import {
@@ -23,7 +24,7 @@ export default function Body() {
   const [period, setPeriod] = useState<Period>('1m')
   const [graphType, setGraphType] = useState<'weight' | 'fat' | 'bmi'>('weight')
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr()
   const existing = data.bodyRecords.find((r) => r.date === today)
 
   const handleSave = async () => {
@@ -57,7 +58,7 @@ export default function Body() {
   const periodDays: Record<Period, number> = { '2w': 14, '1m': 30, '3m': 90, 'all': 9999 }
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - periodDays[period])
-  const cutoffStr = cutoff.toISOString().slice(0, 10)
+  const cutoffStr = localDateStr(cutoff)
 
   const chartData = sorted
     .filter((r) => r.date >= cutoffStr)

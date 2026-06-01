@@ -1,6 +1,34 @@
 import { create } from 'zustand'
 import type { AppData } from '../types'
 import { loadFromDrive, saveToDrive } from './google'
+import { localDateStr } from './utils'
+
+/**
+ * UTC日付で保存されてしまったレコードを修正するマイグレーション。
+ * 日付がローカル今日より未来になっているレコードを1日前に戻す。
+ * （JST深夜0〜8時に入力するとUTCで翌日になる問題の修正）
+ */
+function migrateUtcDates(data: AppData): AppData {
+  const today = localDateStr()
+
+  const fixDate = (date: string) => {
+    if (date > today) {
+      const d = new Date(date + 'T00:00:00')
+      d.setDate(d.getDate() - 1)
+      return localDateStr(d)
+    }
+    return date
+  }
+
+  return {
+    ...data,
+    mealLogs:    data.mealLogs.map(r => ({ ...r, date: fixDate(r.date) })),
+    bodyRecords: data.bodyRecords.map(r => ({ ...r, date: fixDate(r.date) })),
+    cardioLogs:  data.cardioLogs.map(r => ({ ...r, date: fixDate(r.date) })),
+    strengthLogs: data.strengthLogs.map(r => ({ ...r, date: fixDate(r.date) })),
+    sleepLogs:   (data.sleepLogs ?? []).map(r => ({ ...r, date: fixDate(r.date) })),
+  }
+}
 
 const STORAGE_KEY = 'fitlog-data'
 
@@ -27,7 +55,7 @@ function loadFromLocal(): AppData | null {
       localStorage.removeItem(STORAGE_KEY) // 不正データを削除
       return null
     }
-    return { ...DEFAULT_DATA, ...parsed }
+    return migrateUtcDates({ ...DEFAULT_DATA, ...parsed })
   } catch {
     return null
   }
@@ -64,7 +92,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const remote = await loadFromDrive<AppData>()
       if (remote && Array.isArray(remote.bodyRecords)) {
-        const merged = { ...DEFAULT_DATA, ...remote }
+        const merged = migrateUtcDates({ ...DEFAULT_DATA, ...remote })
         set({ data: merged })
         saveToLocal(merged)
       }
