@@ -1,15 +1,20 @@
 import { getApiKey } from './gemini'
 import { localDateStr } from './utils'
+import { getCharacter } from './characters'
 import type { MealLog, CardioLog, StrengthLog, AppData } from '../types'
 
 function isOpenRouterKey(key: string) {
   return key.startsWith('sk-or-')
 }
 
+function getSystemPrompt(data: AppData): string {
+  return getCharacter(data.settings.advisorCharacter).systemPrompt
+}
 
-async function callAI(prompt: string): Promise<string> {
+async function callAI(prompt: string, data: AppData): Promise<string> {
   const apiKey = getApiKey()
   if (!apiKey) return ''
+  const systemPrompt = getSystemPrompt(data)
 
   if (isOpenRouterKey(apiKey)) {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -18,7 +23,7 @@ async function callAI(prompt: string): Promise<string> {
       body: JSON.stringify({
         model: 'google/gemma-4-26b-a4b-it:free',
         messages: [
-          { role: 'system', content: 'あなたは健康管理アドバイザーです。短く具体的な日本語でアドバイスしてください。1〜2文で。' },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt },
         ],
       }),
@@ -27,8 +32,8 @@ async function callAI(prompt: string): Promise<string> {
       const err = await res.json().catch(() => ({}))
       throw new Error(`OpenRouter エラー ${res.status}: ${err?.error?.message ?? res.statusText}`)
     }
-    const data = await res.json()
-    return (data.choices?.[0]?.message?.content ?? '').trim()
+    const d = await res.json()
+    return (d.choices?.[0]?.message?.content ?? '').trim()
   }
 
   // Gemini
@@ -37,15 +42,16 @@ async function callAI(prompt: string): Promise<string> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: `健康管理アドバイザーとして短く具体的な日本語でアドバイスしてください（1〜2文）:\n${prompt}` }] }],
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ parts: [{ text: prompt }] }],
     }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(`Gemini エラー ${res.status}: ${err?.error?.message ?? res.statusText}`)
   }
-  const data = await res.json()
-  return (data.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
+  const d = await res.json()
+  return (d.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
 }
 
 function todayCalorieSummary(data: AppData, goalCalories: number) {
@@ -79,7 +85,7 @@ ${mealType}に「${mealNames}」を記録しました。
 今日のタンパク質合計：${totalProtein.toFixed(1)}g
 この食事内容と今日の栄養バランスを踏まえ、次の食事や生活習慣についてアドバイスをしてください。`
 
-  return callAI(prompt)
+  return callAI(prompt, data)
 }
 
 export async function getCardioAdvice(log: CardioLog, data: AppData): Promise<string> {
@@ -95,12 +101,10 @@ export async function getCardioAdvice(log: CardioLog, data: AppData): Promise<st
 今日の摂取：${intake}kcal / 消費合計：${burned}kcal${weight ? ` / 体重：${weight}kg` : ''}
 この運動内容に対するアドバイスや、次回へのアドバイスをしてください。`
 
-  return callAI(prompt)
+  return callAI(prompt, data)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function getStrengthAdvice(log: StrengthLog, _data: AppData): Promise<string> {
+export async function getStrengthAdvice(log: StrengthLog, data: AppData): Promise<string> {
   const apiKey = getApiKey()
   if (!apiKey) return ''
 
@@ -111,7 +115,7 @@ export async function getStrengthAdvice(log: StrengthLog, _data: AppData): Promi
 推定消費：${log.estimatedCalories ?? 0}kcal
 このトレーニング内容に対するフォームや改善点、次回へのアドバイスをしてください。`
 
-  return callAI(prompt)
+  return callAI(prompt, data)
 }
 
 // ── 日次・週次アドバイス ──────────────────────────────────────
@@ -144,7 +148,7 @@ PFC: タンパク質${s.protein.toFixed(1)}g / 脂質${s.fat.toFixed(1)}g / 炭�
 睡眠: ${s.sleep > 0 ? `${Math.floor(s.sleep / 60)}時間${s.sleep % 60}分` : '未記録'}
 今日の改善点や明日への具体的なアドバイスを3点、箇条書きで短く教えてください。`
 
-  return callAI(prompt)
+  return callAI(prompt, data)
 }
 
 export async function getWeeklyAdvice(data: AppData): Promise<string> {
@@ -178,5 +182,5 @@ export async function getWeeklyAdvice(data: AppData): Promise<string> {
 平均睡眠: ${avgSleep > 0 ? `${Math.floor(avgSleep / 60)}時間${avgSleep % 60}分` : '未記録'}
 1週間の傾向と来週への具体的な改善提案を3点、箇条書きで短く教えてください。`
 
-  return callAI(prompt)
+  return callAI(prompt, data)
 }

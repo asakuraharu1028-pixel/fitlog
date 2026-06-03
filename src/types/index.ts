@@ -84,5 +84,6 @@ export interface AppData {
     heightCm: number
     goalWeightKg?: number
     goalCalories?: number
+    advisorCharacter?: 'default' | 'kenmochi' | 'gaku' | 'togabito'
   }
 }

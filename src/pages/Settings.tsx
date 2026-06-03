@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../lib/store'
 import { getApiKey, setApiKey } from '../lib/gemini'
+import { CHARACTERS } from '../lib/characters'
+import type { AdvisorCharacterId } from '../lib/characters'
 import { loadFromDrive, saveToDrive, getAccessToken } from '../lib/google'
 import { localDateStr } from '../lib/utils'
 import type { BodyRecord } from '../types'
@@ -140,6 +142,32 @@ export default function Settings() {
       >
         {saving ? '保存中...' : saved ? '✓ 保存しました' : '保存'}
       </button>
+
+      {/* AIアドバイザーキャラクター */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <h2 className="font-semibold text-gray-700 mb-1">AIアドバイザー</h2>
+        <p className="text-xs text-gray-400 mb-3">アドバイスの口調・キャラクターを選択できます</p>
+        <div className="space-y-2">
+          {CHARACTERS.map(c => {
+            const isSelected = (data.settings.advisorCharacter ?? 'default') === c.id
+            return (
+              <button
+                key={c.id}
+                onClick={() => saveData({ settings: { ...data.settings, advisorCharacter: c.id as AdvisorCharacterId } })}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-left transition
+                  ${isSelected ? 'border-green-400 bg-green-50' : 'border-gray-100 hover:border-gray-200'}`}
+              >
+                <span className="text-2xl w-8 text-center">{c.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${isSelected ? 'text-green-700' : 'text-gray-700'}`}>{c.name}</p>
+                  <p className="text-xs text-gray-400 truncate">{c.description}</p>
+                </div>
+                {isSelected && <span className="text-green-500 text-xs font-bold shrink-0">選択中</span>}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
       {/* Claude API キー設定 */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
