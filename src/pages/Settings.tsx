@@ -261,11 +261,19 @@ export default function Settings() {
                 logs.push(`✓ 歩数: ${steps.length}件`)
                 if (steps.length > 0) {
                   const { data: stepsData, saveData: stepsSave } = useAppStore.getState()
-                  const stepsMap = new Map((stepsData.stepLogs ?? []).map((s: { date: string; steps: number }) => [s.date, s.steps]))
+                  // HC から取得した日付ごとに合計（同日複数レコードを集計）
+                  const hcMap = new Map<string, number>()
                   for (const s of steps as { date: string; steps: number }[]) {
-                    stepsMap.set(s.date, (stepsMap.get(s.date) ?? 0) + s.steps)
+                    hcMap.set(s.date, (hcMap.get(s.date) ?? 0) + s.steps)
                   }
-                  const newStepLogs = Array.from(stepsMap.entries()).map(([date, st]) => ({ date, steps: st }))
+                  // 既存の stepLogs に HC データをマージ（HC 側を優先）
+                  const existingOther = (stepsData.stepLogs ?? []).filter(
+                    (s: { date: string }) => !hcMap.has(s.date)
+                  )
+                  const newStepLogs = [
+                    ...existingOther,
+                    ...Array.from(hcMap.entries()).map(([date, st]) => ({ date, steps: st })),
+                  ].sort((a, b) => a.date.localeCompare(b.date))
                   await stepsSave({ stepLogs: newStepLogs })
                 }
 
