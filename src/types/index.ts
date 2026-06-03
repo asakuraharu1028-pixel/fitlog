@@ -73,6 +73,14 @@ export interface StepLog {
   steps: number
 }
 
+export interface AdviceLog {
+  id: string
+  date: string       // YYYY-MM-DD
+  createdAt: string  // ISO8601
+  daily: string
+  weekly: string
+}
+
 export type DietPolicy = 'meal' | 'balance' | 'exercise'
 
 export interface MealPlanDish {
@@ -115,6 +123,7 @@ export interface AppData {
   strengthLogs: StrengthLog[]
   sleepLogs: SleepLog[]
   stepLogs: StepLog[]
+  adviceLogs: AdviceLog[]
   settings: {
     heightCm: number
     goalWeightKg?: number

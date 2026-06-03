@@ -3,6 +3,7 @@ import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
 import { getApiKey } from '../lib/gemini'
+import type { AdviceLog } from '../types'
 import { computeTrophies, TIER_COLORS } from '../lib/trophies'
 import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy } from 'lucide-react'
 import type { AppData } from '../types'
@@ -12,7 +13,7 @@ function todayStr() {
 }
 
 export default function Home() {
-  const { data } = useAppStore()
+  const { data, saveData } = useAppStore()
   const [today, setToday] = useState(todayStr)
 
   // 日付が変わったら today を更新（1分ごとにチェック）
@@ -83,6 +84,17 @@ export default function Home() {
       ])
       setDailyAdvice(d || null)
       setWeeklyAdvice(w || null)
+      if (d || w) {
+        const log: AdviceLog = {
+          id: crypto.randomUUID(),
+          date: today,
+          createdAt: new Date().toISOString(),
+          daily: d ?? '',
+          weekly: w ?? '',
+        }
+        const existing = (data.adviceLogs ?? []).filter(a => a.date !== today)
+        await saveData({ adviceLogs: [...existing, log] })
+      }
     } catch (e) {
       setAdviceError(e instanceof Error ? e.message : String(e))
     } finally {

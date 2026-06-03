@@ -81,16 +81,31 @@ export default function Report() {
     }
   })
 
+  // 睡眠グラフデータ（分 → 時間）
+  const sleepChartData = dates.map((date) => {
+    const logs = (data.sleepLogs ?? []).filter((s) => s.date === date)
+    const totalMin = logs.reduce((s, r) => s + r.durationMin, 0)
+    return {
+      date: shortDate(date, period),
+      睡眠時間: totalMin > 0 ? Math.round(totalMin / 6) / 10 : null,
+    }
+  })
+
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight ?? 60
+
   // 運動サマリーデータ
   const exerciseChartData = dates.map((date) => {
     const cardio   = data.cardioLogs.filter((c) => c.date === date)
     const strength = data.strengthLogs.filter((s) => s.date === date)
+    const stepLog  = (data.stepLogs ?? []).find((l) => l.date === date)
     const cardioKcal   = cardio.reduce((s, c) => s + c.caloriesBurned, 0)
     const strengthKcal = strength.reduce((s, t) => s + (t.estimatedCalories ?? 0), 0)
+    const stepsKcal    = stepLog ? Math.round(stepLog.steps * weightKg * 0.0005) : 0
     return {
       date: shortDate(date, period),
       有酸素: cardioKcal || null,
       筋トレ: strengthKcal || null,
+      歩数: stepsKcal || null,
     }
   })
 
@@ -101,7 +116,7 @@ export default function Report() {
     return days.length ? Math.round(days.reduce((s, d) => s + (d.カロリー ?? 0), 0) / days.length) : 0
   })()
   const totalExercise = exerciseChartData.reduce(
-    (s, d) => s + (d.有酸素 ?? 0) + (d.筋トレ ?? 0), 0
+    (s, d) => s + (d.有酸素 ?? 0) + (d.筋トレ ?? 0) + (d.歩数 ?? 0), 0
   )
   const latestBody = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]
   const oldestInRange = data.bodyRecords
@@ -245,9 +260,40 @@ export default function Report() {
             <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="有酸素" stackId="a" fill="#fdba74" radius={[0, 0, 0, 0]} />
-            <Bar dataKey="筋トレ" stackId="a" fill="#c084fc" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="筋トレ" stackId="a" fill="#c084fc" radius={[0, 0, 0, 0]} />
+            <Bar dataKey="歩数" stackId="a" fill="#5eead4" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* 睡眠グラフ */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <h2 className="font-semibold text-gray-700 mb-3">睡眠時間推移</h2>
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={sleepChartData} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+            <YAxis tick={{ fontSize: 10 }} unit="h" domain={[0, 'auto']} />
+            <Tooltip
+              contentStyle={{ borderRadius: 8, fontSize: 12 }}
+              formatter={(v: number) => [`${v}時間`, '睡眠時間']}
+            />
+            <Bar dataKey="睡眠時間" fill="#818cf8" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+        {(() => {
+          const recorded = sleepChartData.filter(d => d.睡眠時間)
+          const avg = recorded.length
+            ? Math.round(recorded.reduce((s, d) => s + (d.睡眠時間 ?? 0), 0) / recorded.length * 10) / 10
+            : null
+          return avg !== null ? (
+            <p className="text-xs text-gray-400 text-center mt-2">
+              平均睡眠時間: <span className="text-indigo-500 font-semibold">{avg}時間</span>（{recorded.length}日間記録）
+            </p>
+          ) : (
+            <p className="text-xs text-gray-400 text-center mt-2">睡眠記録がありません</p>
+          )
+        })()}
       </div>
 
       {/* CSVエクスポート */}
