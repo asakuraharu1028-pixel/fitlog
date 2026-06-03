@@ -17,6 +17,8 @@
     "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@types/gapi": "^0.0.47",
     "@types/google.accounts": "^0.0.18",
+    "@zxing/browser": "^0.2.0",
+    "@zxing/library": "^0.23.0",
     "cross-env": "^10.1.0",
     "lucide-react": "^1.17.0",
     "nanoid": "^5.1.11",

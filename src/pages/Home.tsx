@@ -45,7 +45,7 @@ export default function Home() {
   const totalCaloriesOut =
     todayCardio.reduce((sum, c) => sum + c.caloriesBurned, 0) +
     todayStrength.reduce((sum, s) => sum + (s.estimatedCalories ?? 0), 0) +
-    stepsCalories
+    (stepsIsToday ? stepsCalories : 0)
 
   // 今日の合計PFC・塩分
   const allEntries = todayMeals.flatMap(m => m.entries)

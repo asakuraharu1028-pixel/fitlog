@@ -90,6 +90,56 @@ export async function analyzeFoodText(text: string): Promise<AiFoodResult[]> {
   ])
 }
 
+const LABEL_PROMPT = `あなたは栄養士アシスタントです。食品パッケージの栄養成分表示ラベルまたは商品画像から情報を読み取ってください。
+必ず以下のJSON（配列ではなくオブジェクト1つ）のみで返答してください（説明文不要）:
+{"name":"商品名","grams":1食分のグラム数,"calories":kcal整数,"protein":タンパク質g,"fat":脂質g,"carbs":炭水化物g,"fiber":食物繊維g,"vitA":0,"vitC":0,"vitD":0,"ca":カルシウムmg整数,"fe":鉄mg,"na":ナトリウムmg整数}
+- gramsはラベルの「1食分の量」や「内容量」を使う（不明なら100）
+- 栄養素はgramsに対応した絶対量で返す（100g当たりの値ならgrams/100を乗算する）
+- 商品名が読み取れない場合は"不明な商品"とする`
+
+export async function analyzeFoodLabel(base64: string, mimeType: string): Promise<AiFoodResult> {
+  const apiKey = getApiKey()
+  if (!apiKey) throw new Error('APIキーが設定されていません')
+
+  let text: string
+  if (isOpenRouterKey(apiKey)) {
+    const data = await callOpenRouter(apiKey, [
+      { role: 'system', content: LABEL_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+          { type: 'text', text: 'この商品の栄養成分表示から情報を読み取ってください。' },
+        ],
+      },
+    ])
+    return data[0]
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: mimeType, data: base64 } },
+          { text: `${LABEL_PROMPT}\nこの商品の栄養成分表示から情報を読み取ってください。` },
+        ],
+      }],
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error((err as { error?: { message?: string } }).error?.message ?? `APIエラー ${res.status}`)
+  }
+  const data = await res.json()
+  text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  const match = text.match(/\{[\s\S]*\}/)
+  if (!match) throw new Error('AIからの応答を解析できませんでした')
+  return JSON.parse(match[0]) as AiFoodResult
+}
+
 export async function analyzeFoodImage(base64: string, mimeType: string): Promise<AiFoodResult[]> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('APIキーが設定されていません')

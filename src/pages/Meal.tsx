@@ -1,11 +1,13 @@
 import { useState, useRef } from 'react'
 import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
-import { analyzeFoodText, analyzeFoodImage, getApiKey, type AiFoodResult } from '../lib/gemini'
+import { analyzeFoodText, analyzeFoodImage, analyzeFoodLabel, getApiKey, type AiFoodResult } from '../lib/gemini'
+import { lookupBarcode, BarcodeNotFoundError, submitToOpenFoodFacts, toPer100g } from '../lib/barcode'
 import { getMealAdvice } from '../lib/advice'
 import type { MealLog, FoodEntry } from '../types'
 import { nanoid } from 'nanoid'
-import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles } from 'lucide-react'
+import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch } from 'lucide-react'
+import BarcodeScanner from '../components/BarcodeScanner'
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 const MEAL_LABELS: Record<MealType, string> = {
@@ -57,7 +59,13 @@ export default function Meal() {
     setPreviewUrl(null)
     setImageBase64(null)
   }
-  const [mode, setMode] = useState<'idle' | 'text' | 'image'>('idle')
+  const [mode, setMode] = useState<'idle' | 'text' | 'image' | 'barcode' | 'label'>('idle')
+  const [pendingBarcode, setPendingBarcode] = useState<string | null>(null)
+  const [labelBase64, setLabelBase64] = useState<string | null>(null)
+  const [labelPreviewUrl, setLabelPreviewUrl] = useState<string | null>(null)
+  const [labelImageType, setLabelImageType] = useState<string>('image/jpeg')
+  const [submitting, setSubmitting] = useState(false)
+  const labelFileRef = useRef<HTMLInputElement>(null)
   const [textInput, setTextInput] = useState('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [imageBase64, setImageBase64] = useState<string | null>(null)
@@ -134,11 +142,88 @@ export default function Meal() {
     }
   }
 
-  // 結果を食事ログに追加
-  const handleAddAll = async () => {
+
+  // 個別削除（結果から）
+  const removeResult = (idx: number) => {
+    setResults((prev) => prev?.filter((_, i) => i !== idx) ?? null)
+  }
+
+  // 食事エントリー削除
+  const handleDelete = async (logId: string, entryIdx: number) => {
+    const updatedLogs = data.mealLogs
+      .map((m) => m.id !== logId ? m : { ...m, entries: m.entries.filter((_, i) => i !== entryIdx) })
+      .filter((m) => m.entries.length > 0)
+    await saveData({ mealLogs: updatedLogs })
+  }
+
+  const reset = () => {
+    setMode('idle'); setResults(null); setError(null)
+    setTextInput(''); setPreviewUrl(null); setImageBase64(null)
+    setPendingBarcode(null); setLabelBase64(null); setLabelPreviewUrl(null)
+  }
+
+  const handleBarcodeDetected = async (code: string) => {
+    setMode('idle')
+    setError(null)
+    setAnalyzing(true)
+    try {
+      const result = await lookupBarcode(code)
+      setResults([result])
+    } catch (e) {
+      if (e instanceof BarcodeNotFoundError) {
+        setPendingBarcode(e.barcode)
+        setMode('label')
+        setError(null)
+      } else {
+        setError(e instanceof Error ? e.message : 'バーコード取得に失敗しました')
+      }
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleLabelImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLabelImageType(file.type)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string
+      setLabelPreviewUrl(dataUrl)
+      setLabelBase64(dataUrl.split(',')[1])
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleAnalyzeLabel = async () => {
+    if (!labelBase64) return
+    setError(null)
+    setAnalyzing(true)
+    try {
+      const result = await analyzeFoodLabel(labelBase64, labelImageType)
+      setResults([result])
+      setMode('idle')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'AI解析に失敗しました')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const handleAddAllWithSubmit = async () => {
     if (!results) return
     setSaving(true)
+    setSubmitting(false)
     try {
+      // Open Food Facts への投稿（未収録バーコードがある場合）
+      if (pendingBarcode && results.length > 0) {
+        setSubmitting(true)
+        const per100g = toPer100g(results[0])
+        await submitToOpenFoodFacts(pendingBarcode, results[0], per100g)
+        setSubmitting(false)
+        setPendingBarcode(null)
+      }
+
       const entries = results.map(toFoodEntry)
       const existing = data.mealLogs.find(
         (m) => m.date === today && m.mealType === mealType
@@ -157,14 +242,13 @@ export default function Meal() {
       setTextInput('')
       setPreviewUrl(null)
       setImageBase64(null)
+      setLabelBase64(null)
+      setLabelPreviewUrl(null)
 
-      // 保存後にAIアドバイスを取得
       if (hasApiKey) {
         setAdviceLoading(true)
         setAdvice(null)
-        const savedLog = updatedLogs.find(
-          m => m.date === today && m.mealType === mealType
-        )
+        const savedLog = updatedLogs.find(m => m.date === today && m.mealType === mealType)
         if (savedLog) {
           getMealAdvice(savedLog, useAppStore.getState().data)
             .then(a => { if (a) setAdvice(a) })
@@ -175,25 +259,8 @@ export default function Meal() {
       }
     } finally {
       setSaving(false)
+      setSubmitting(false)
     }
-  }
-
-  // 個別削除（結果から）
-  const removeResult = (idx: number) => {
-    setResults((prev) => prev?.filter((_, i) => i !== idx) ?? null)
-  }
-
-  // 食事エントリー削除
-  const handleDelete = async (logId: string, entryIdx: number) => {
-    const updatedLogs = data.mealLogs
-      .map((m) => m.id !== logId ? m : { ...m, entries: m.entries.filter((_, i) => i !== entryIdx) })
-      .filter((m) => m.entries.length > 0)
-    await saveData({ mealLogs: updatedLogs })
-  }
-
-  const reset = () => {
-    setMode('idle'); setResults(null); setError(null)
-    setTextInput(''); setPreviewUrl(null); setImageBase64(null)
   }
 
   return (
@@ -281,6 +348,14 @@ export default function Meal() {
               <span className="text-sm font-medium">テキストで入力</span>
               <span className="text-xs text-gray-400">食べた内容を自由記入</span>
             </button>
+            <button onClick={() => setMode('barcode')}
+              className="col-span-2 flex items-center justify-center gap-3 border-2 border-dashed border-purple-200 rounded-xl py-4 text-purple-600 hover:bg-purple-50 transition">
+              <ScanBarcode size={24} />
+              <div className="text-left">
+                <p className="text-sm font-medium">バーコードをスキャン</p>
+                <p className="text-xs text-gray-400">商品のJANコードから栄養素を取得</p>
+              </div>
+            </button>
           </div>
         ) : mode === 'text' ? (
           // テキスト入力モード
@@ -300,6 +375,59 @@ export default function Meal() {
               <button onClick={handleAnalyze} disabled={analyzing || !textInput.trim()}
                 className="w-full bg-blue-500 text-white rounded-xl py-3 font-semibold disabled:opacity-40 hover:bg-blue-600 transition">
                 {analyzing ? 'AI解析中...' : '✨ AIで栄養素を解析'}
+              </button>
+            )}
+          </div>
+        ) : mode === 'barcode' ? (
+          // バーコードスキャンモード
+          <div className="space-y-3">
+            {analyzing ? (
+              <div className="text-center py-6 text-sm text-gray-400 animate-pulse">商品情報を取得中...</div>
+            ) : (
+              <BarcodeScanner
+                onDetected={handleBarcodeDetected}
+                onClose={reset}
+              />
+            )}
+          </div>
+        ) : mode === 'label' ? (
+          // 未収録商品：ラベル撮影モード
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2 text-purple-600">
+                <PackageSearch size={16} />
+                <span className="text-sm font-medium">データベース未収録の商品</span>
+              </div>
+              <button onClick={reset} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+            </div>
+            <p className="text-xs text-gray-500 bg-purple-50 rounded-xl px-3 py-2">
+              栄養成分表示ラベルを撮影すると、AIが読み取ってOpen Food Factsに登録します。
+            </p>
+            {pendingBarcode && (
+              <p className="text-xs text-gray-400">バーコード: <span className="font-mono">{pendingBarcode}</span></p>
+            )}
+            <input ref={labelFileRef} type="file" accept="image/*" capture="environment"
+              className="hidden" onChange={handleLabelImageSelect} />
+            {labelPreviewUrl ? (
+              <div className="relative">
+                <img src={labelPreviewUrl} alt="ラベル" className="w-full rounded-xl object-cover max-h-48" />
+                <button onClick={() => { setLabelPreviewUrl(null); setLabelBase64(null) }}
+                  className="absolute top-2 right-2 bg-white rounded-full p-1 shadow">
+                  <X size={14} className="text-gray-600" />
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => labelFileRef.current?.click()}
+                className="w-full border-2 border-dashed border-purple-200 rounded-xl py-8 flex flex-col items-center gap-2 text-purple-600 hover:bg-purple-50 transition">
+                <Camera size={32} />
+                <span className="text-sm">栄養成分表示を撮影</span>
+                <span className="text-xs text-gray-400">パッケージ裏の成分表を写してください</span>
+              </button>
+            )}
+            {labelPreviewUrl && (
+              <button onClick={handleAnalyzeLabel} disabled={analyzing}
+                className="w-full bg-purple-500 text-white rounded-xl py-3 font-semibold disabled:opacity-40 hover:bg-purple-600 transition">
+                {analyzing ? 'AI読み取り中...' : '✨ AIで栄養素を読み取る'}
               </button>
             )}
           </div>
@@ -372,12 +500,17 @@ export default function Meal() {
                 className="flex-1 border border-gray-200 text-gray-500 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition">
                 やり直す
               </button>
-              <button onClick={handleAddAll} disabled={saving || results.length === 0}
+              <button onClick={handleAddAllWithSubmit} disabled={saving || results.length === 0}
                 className="flex-1 bg-green-500 text-white rounded-xl py-2.5 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40 hover:bg-green-600 transition">
                 <Plus size={15} />
-                {MEAL_LABELS[mealType]}に追加
+                {submitting ? 'DB登録中...' : `${MEAL_LABELS[mealType]}に追加`}
               </button>
             </div>
+            {pendingBarcode && (
+              <p className="text-xs text-center text-purple-500">
+                ✓ 追加時にOpen Food Factsへ自動登録されます
+              </p>
+            )}
           </div>
         )}
       </div>
