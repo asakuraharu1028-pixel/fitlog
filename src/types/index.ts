@@ -73,6 +73,8 @@ export interface StepLog {
   steps: number
 }
 
+export type DietPolicy = 'meal' | 'balance' | 'exercise'
+
 export interface AppData {
   bodyRecords: BodyRecord[]
   mealLogs: MealLog[]
@@ -83,7 +85,16 @@ export interface AppData {
   settings: {
     heightCm: number
     goalWeightKg?: number
+    /** 目標摂取カロリー（自動計算して保存） */
     goalCalories?: number
+    /** 目標消費（運動）カロリー（自動計算して保存） */
+    goalBurnCalories?: number
+    /** 基礎代謝 kcal（手動入力） */
+    bmr?: number
+    /** 目標達成期間（ヶ月） */
+    goalMonths?: number
+    /** ダイエット方針 */
+    dietPolicy?: DietPolicy
     advisorCharacter?: 'default' | 'kenmochi' | 'gaku' | 'togabito'
   }
 }

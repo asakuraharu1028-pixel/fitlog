@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAppStore } from '../lib/store'
 import { getApiKey, setApiKey } from '../lib/gemini'
 import { CHARACTERS } from '../lib/characters'
 import type { AdvisorCharacterId } from '../lib/characters'
 import { loadFromDrive, saveToDrive, getAccessToken } from '../lib/google'
 import { localDateStr } from '../lib/utils'
-import type { BodyRecord } from '../types'
+import type { BodyRecord, DietPolicy } from '../types'
 import { isNative } from '../lib/auth'
 import {
   hcCheckAvailability, hcCheckPermissions, hcOpenPermissions,
@@ -16,28 +16,94 @@ import {
 import { nanoid } from 'nanoid'
 import { Eye, EyeOff } from 'lucide-react'
 
+/** ダイエット方針ごとの食事/運動の割合 */
+const POLICY_RATIO: Record<DietPolicy, { meal: number; exercise: number }> = {
+  meal:     { meal: 0.8, exercise: 0.2 },
+  balance:  { meal: 0.5, exercise: 0.5 },
+  exercise: { meal: 0.2, exercise: 0.8 },
+}
+
+const POLICY_LABELS: Record<DietPolicy, string> = {
+  meal:     '食事管理中心',
+  balance:  '食事・運動バランス',
+  exercise: '運動中心',
+}
+
+const POLICY_DESC: Record<DietPolicy, string> = {
+  meal:     '食事 80% / 運動 20%',
+  balance:  '食事 50% / 運動 50%',
+  exercise: '食事 20% / 運動 80%',
+}
+
+/** 摂取・消費目標カロリーを計算する */
+function calcGoals(
+  currentWeight: number,
+  goalWeight: number,
+  bmr: number,
+  goalMonths: number,
+  policy: DietPolicy,
+): { intake: number; burn: number } | null {
+  if (currentWeight <= 0 || goalWeight <= 0 || bmr <= 0 || goalMonths <= 0) return null
+  // 1kg 脂肪 ≈ 7200 kcal
+  const totalDeficit = (currentWeight - goalWeight) * 7200
+  const dailyDeficit = totalDeficit / (goalMonths * 30)
+  // TDEE = 基礎代謝 × 活動係数 1.3（軽い活動）
+  const tdee = bmr * 1.3
+  const ratio = POLICY_RATIO[policy]
+  const intake = Math.round(tdee - dailyDeficit * ratio.meal)
+  const burn   = Math.round(Math.max(0, dailyDeficit * ratio.exercise))
+  return { intake: Math.max(1000, intake), burn }
+}
+
 export default function Settings() {
   const { data, saveData, loadData } = useAppStore()
-  const [height, setHeight] = useState(String(data.settings.heightCm))
-  const [goalWeight, setGoalWeight] = useState(String(data.settings.goalWeightKg ?? ''))
-  const [goalCalories, setGoalCalories] = useState(String(data.settings.goalCalories ?? ''))
-  const [saved, setSaved] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [apiKey, setApiKeyState] = useState(getApiKey)
-  const [showKey, setShowKey] = useState(false)
+  const s = data.settings
+
+  const [height, setHeight]       = useState(String(s.heightCm))
+  const [goalWeight, setGoalWeight] = useState(String(s.goalWeightKg ?? ''))
+  const [bmrInput, setBmrInput]   = useState(String(s.bmr ?? ''))
+  const [goalMonths, setGoalMonths] = useState(String(s.goalMonths ?? ''))
+  const [policy, setPolicy]       = useState<DietPolicy>(s.dietPolicy ?? 'balance')
+  const [saved, setSaved]         = useState(false)
+  const [saving, setSaving]       = useState(false)
+  const [apiKey, setApiKeyState]  = useState(getApiKey)
+  const [showKey, setShowKey]     = useState(false)
   const [apiKeySaved, setApiKeySaved] = useState(false)
-  const [diagLog, setDiagLog] = useState<string[]>([])
+  const [diagLog, setDiagLog]     = useState<string[]>([])
   const [diagRunning, setDiagRunning] = useState(false)
-  const [hcLog, setHcLog] = useState<string[]>([])
+  const [hcLog, setHcLog]         = useState<string[]>([])
   const [hcRunning, setHcRunning] = useState(false)
   const [reloadMsg, setReloadMsg] = useState<string | null>(null)
   const [reloading, setReloading] = useState(false)
 
   useEffect(() => {
-    setHeight(String(data.settings.heightCm))
-    setGoalWeight(String(data.settings.goalWeightKg ?? ''))
-    setGoalCalories(String(data.settings.goalCalories ?? ''))
-  }, [data.settings])
+    setHeight(String(s.heightCm))
+    setGoalWeight(String(s.goalWeightKg ?? ''))
+    setBmrInput(String(s.bmr ?? ''))
+    setGoalMonths(String(s.goalMonths ?? ''))
+    setPolicy(s.dietPolicy ?? 'balance')
+  }, [s])
+
+  // 最新の体重レコード
+  const latestWeight = useMemo(() => {
+    if (data.bodyRecords.length === 0) return null
+    return [...data.bodyRecords].sort((a, b) => b.date.localeCompare(a.date))[0].weight
+  }, [data.bodyRecords])
+
+  // 基礎代謝の参考値（体重のみから簡易推算: 体重 × 22 kcal）
+  const bmrEstimate = useMemo(() => {
+    if (latestWeight) return Math.round(latestWeight * 22)
+    return null
+  }, [latestWeight])
+
+  // 目標カロリー自動計算
+  const goals = useMemo(() => {
+    const cw = latestWeight ?? 0
+    const gw = parseFloat(goalWeight)
+    const bmr = parseFloat(bmrInput) || (bmrEstimate ?? 0)
+    const gm = parseFloat(goalMonths)
+    return calcGoals(cw, gw, bmr, gm, policy)
+  }, [latestWeight, goalWeight, bmrInput, bmrEstimate, goalMonths, policy])
 
   const handleSave = async () => {
     const h = parseFloat(height)
@@ -46,10 +112,14 @@ export default function Settings() {
     try {
       await saveData({
         settings: {
-          ...data.settings,
+          ...s,
           heightCm: h,
-          goalWeightKg: goalWeight ? parseFloat(goalWeight) : undefined,
-          goalCalories: goalCalories ? parseInt(goalCalories) : undefined,
+          goalWeightKg:    goalWeight  ? parseFloat(goalWeight)  : undefined,
+          bmr:             bmrInput    ? parseFloat(bmrInput)    : undefined,
+          goalMonths:      goalMonths  ? parseFloat(goalMonths)  : undefined,
+          dietPolicy:      policy,
+          goalCalories:    goals?.intake,
+          goalBurnCalories: goals?.burn,
         },
       })
       setSaved(true)
@@ -69,41 +139,99 @@ export default function Settings() {
           <label className="block">
             <span className="text-sm font-medium text-gray-600">身長 (cm) <span className="text-red-400">*</span></span>
             <input
-              type="number"
-              step="0.1"
-              value={height}
+              type="number" step="0.1" value={height}
               onChange={(e) => setHeight(e.target.value)}
               placeholder="例: 170.0"
               className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
             />
           </label>
 
+          {/* 現在の体重（読み取り専用：最新レコードから） */}
+          <div>
+            <span className="text-sm font-medium text-gray-600">現在の体重</span>
+            <p className="mt-1 px-3 py-2 rounded-xl bg-gray-50 text-gray-700 text-sm">
+              {latestWeight != null
+                ? <><span className="font-bold text-blue-600">{latestWeight.toFixed(1)} kg</span><span className="text-gray-400 ml-2">（最新の体重記録から）</span></>
+                : <span className="text-gray-400">体重記録がありません。体重ページから記録してください。</span>
+              }
+            </p>
+          </div>
+
+          {/* 基礎代謝 */}
+          <label className="block">
+            <span className="text-sm font-medium text-gray-600">基礎代謝 (kcal)</span>
+            <input
+              type="number" step="10" value={bmrInput}
+              onChange={(e) => setBmrInput(e.target.value)}
+              placeholder={bmrEstimate ? `参考値: ${bmrEstimate}` : '例: 1500'}
+              className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              {bmrEstimate
+                ? `体重から推定値: 約 ${bmrEstimate} kcal（未入力の場合はこの値を使用）`
+                : '体重計・健康アプリで確認した基礎代謝を入力してください'}
+            </p>
+          </label>
+
           {/* 目標体重 */}
           <label className="block">
             <span className="text-sm font-medium text-gray-600">目標体重 (kg)</span>
             <input
-              type="number"
-              step="0.1"
-              value={goalWeight}
+              type="number" step="0.1" value={goalWeight}
               onChange={(e) => setGoalWeight(e.target.value)}
               placeholder="例: 60.0"
               className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
             />
           </label>
 
-          {/* 目標カロリー */}
+          {/* 目標達成期間 */}
           <label className="block">
-            <span className="text-sm font-medium text-gray-600">1日の目標カロリー (kcal)</span>
+            <span className="text-sm font-medium text-gray-600">目標達成期間（ヶ月）</span>
             <input
-              type="number"
-              step="50"
-              value={goalCalories}
-              onChange={(e) => setGoalCalories(e.target.value)}
-              placeholder="例: 1800"
+              type="number" step="1" min="1" value={goalMonths}
+              onChange={(e) => setGoalMonths(e.target.value)}
+              placeholder="例: 3"
               className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
             />
-            <p className="text-xs text-gray-400 mt-1">未設定の場合は 2000 kcal で計算されます</p>
           </label>
+
+          {/* ダイエット方針 */}
+          <div>
+            <span className="text-sm font-medium text-gray-600 block mb-2">ダイエット方針</span>
+            <div className="space-y-2">
+              {(['meal', 'balance', 'exercise'] as DietPolicy[]).map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPolicy(p)}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-left transition
+                    ${policy === p ? 'border-green-400 bg-green-50' : 'border-gray-100 hover:border-gray-200'}`}
+                >
+                  <span className={`text-sm font-medium ${policy === p ? 'text-green-700' : 'text-gray-700'}`}>
+                    {POLICY_LABELS[p]}
+                  </span>
+                  <span className="text-xs text-gray-400">{POLICY_DESC[p]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 自動計算結果 */}
+          {goals ? (
+            <div className="rounded-xl bg-orange-50 p-3 space-y-2">
+              <p className="text-xs font-semibold text-orange-700 mb-1">📊 自動計算された1日の目標</p>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">目標摂取カロリー</span>
+                <span className="font-bold text-green-600">{goals.intake.toLocaleString()} kcal</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">目標消費カロリー（運動）</span>
+                <span className="font-bold text-orange-500">{goals.burn.toLocaleString()} kcal</span>
+              </div>
+            </div>
+          ) : (latestWeight != null && goalWeight && goalMonths) ? (
+            <p className="text-xs text-red-400">計算に必要な値を入力してください</p>
+          ) : null}
 
         </div>
       </div>
