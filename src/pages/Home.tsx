@@ -3,7 +3,9 @@ import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
 import { getApiKey } from '../lib/gemini'
-import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell } from 'lucide-react'
+import { computeTrophies, TIER_COLORS } from '../lib/trophies'
+import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy } from 'lucide-react'
+import type { AppData } from '../types'
 
 function todayStr() {
   return localDateStr()
@@ -260,6 +262,9 @@ export default function Home() {
         )}
       </div>
 
+      {/* トロフィー */}
+      <TrophySection data={data} />
+
       {/* AIアドバイス */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
         <div className="flex items-center justify-between mb-3">
@@ -309,6 +314,63 @@ export default function Home() {
         )}
       </div>
 
+    </div>
+  )
+}
+
+function TrophySection({ data }: { data: AppData }) {
+  const trophies = computeTrophies(data)
+  const earned   = trophies.filter(t => t.earned)
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <button
+        className="w-full flex items-center justify-between"
+        onClick={() => setOpen(o => !o)}
+      >
+        <h2 className="text-sm font-semibold text-gray-500 flex items-center gap-1.5">
+          <Trophy size={14} className="text-yellow-500" />
+          トロフィー
+          <span className="ml-1 bg-yellow-100 text-yellow-700 text-xs font-bold px-1.5 py-0.5 rounded-full">
+            {earned.length}/{trophies.length}
+          </span>
+        </h2>
+        <span className="text-xs text-gray-400">{open ? '閉じる' : '開く'}</span>
+      </button>
+
+      {/* 獲得済みプレビュー（常時表示） */}
+      {earned.length > 0 && !open && (
+        <div className="flex gap-2 mt-2 flex-wrap">
+          {earned.slice(0, 5).map(t => (
+            <span key={t.id} title={t.title} className="text-xl">{t.icon}</span>
+          ))}
+          {earned.length > 5 && (
+            <span className="text-xs text-gray-400 self-center">+{earned.length - 5}</span>
+          )}
+        </div>
+      )}
+
+      {open && (
+        <div className="mt-3 grid grid-cols-1 gap-2">
+          {trophies.map(t => (
+            <div key={t.id}
+              className={`flex items-center gap-3 border rounded-xl px-3 py-2 transition
+                ${t.earned ? TIER_COLORS[t.tier] : 'bg-gray-50 border-gray-100 opacity-50'}`}>
+              <span className="text-2xl">{t.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate">{t.title}</p>
+                <p className="text-xs opacity-70">{t.description}</p>
+              </div>
+              {t.earned && (
+                <span className="text-xs font-bold shrink-0">
+                  {t.tier === 'gold' ? '🥇' : t.tier === 'silver' ? '🥈' : '🥉'}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
