@@ -10,6 +10,8 @@ import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.aggregate.AggregationResultGroupedByPeriod
+import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.health.connect.client.records.metadata.Metadata
@@ -107,16 +109,22 @@ class HealthConnectPlugin : Plugin() {
         scope.launch {
             try {
                 val client = HealthConnectClient.getOrCreate(context)
-                val start = LocalDate.parse(startStr).atStartOfDay(ZoneId.systemDefault()).toInstant()
-                val end   = LocalDate.parse(endStr).plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant()
-                val response = client.readRecords(
-                    ReadRecordsRequest(StepsRecord::class, TimeRangeFilter.between(start, end))
+                val startDateTime = LocalDate.parse(startStr).atStartOfDay()
+                val endDateTime   = LocalDate.parse(endStr).plusDays(1).atStartOfDay()
+                // 日別集計で取得（1000件上限を回避・LocalDateTimeを使用）
+                val response = client.aggregateGroupByPeriod(
+                    AggregateGroupByPeriodRequest(
+                        metrics = setOf(StepsRecord.COUNT_TOTAL),
+                        timeRangeFilter = TimeRangeFilter.between(startDateTime, endDateTime),
+                        timeRangeSlicer = Period.ofDays(1)
+                    )
                 )
                 val arr = JSArray()
-                for (r in response.records) {
+                for (r: AggregationResultGroupedByPeriod in response) {
+                    val steps = r.result[StepsRecord.COUNT_TOTAL] ?: continue
                     val obj = JSObject()
-                    obj.put("date", r.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString())
-                    obj.put("steps", r.count)
+                    obj.put("date", r.startTime.toLocalDate().toString())
+                    obj.put("steps", steps)
                     arr.put(obj)
                 }
                 val res = JSObject(); res.put("data", arr)
