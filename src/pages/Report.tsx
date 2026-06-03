@@ -276,7 +276,7 @@ export default function Report() {
             <YAxis tick={{ fontSize: 10 }} unit="h" domain={[0, 'auto']} />
             <Tooltip
               contentStyle={{ borderRadius: 8, fontSize: 12 }}
-              formatter={(v: number) => [`${v}時間`, '睡眠時間']}
+              formatter={(v) => [`${v}時間`, '睡眠時間']}
             />
             <Bar dataKey="睡眠時間" fill="#818cf8" radius={[4, 4, 0, 0]} />
           </BarChart>
