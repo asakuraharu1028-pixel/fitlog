@@ -40,42 +40,67 @@ export class BarcodeNotFoundError extends Error {
   }
 }
 
+// base64 文字列を Blob に変換
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const bin = atob(base64)
+  const buf = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
+  return new Blob([buf], { type: mimeType })
+}
+
 export async function submitToOpenFoodFacts(
   barcode: string,
   result: AiFoodResult,
-  per100g: Per100g
+  per100g: Per100g,
+  labelBase64?: string,       // 栄養成分ラベル画像（base64）
+  labelMimeType?: string,
 ): Promise<void> {
-  const params = new URLSearchParams({
-    code: barcode,
-    product_name: result.name,
-    product_name_ja: result.name,
-    serving_size: `${result.grams}g`,
-    'nutriment_energy-kcal': String(per100g.calories),
-    'nutriment_energy-kcal_unit': 'kcal',
-    nutriment_proteins: String(per100g.protein),
-    nutriment_proteins_unit: 'g',
-    nutriment_fat: String(per100g.fat),
-    nutriment_fat_unit: 'g',
-    nutriment_carbohydrates: String(per100g.carbs),
-    nutriment_carbohydrates_unit: 'g',
-    nutriment_fiber: String(per100g.fiber),
-    nutriment_fiber_unit: 'g',
-    nutriment_sodium: String(per100g.na / 1000),
-    nutriment_sodium_unit: 'g',
-    lang: 'ja',
-    lc: 'ja',
-    app_name: 'fitlog',
-    app_version: '1.0',
-  })
+  // ① 商品情報・栄養素を登録
+  const form = new FormData()
+  form.append('code', barcode)
+  form.append('product_name', result.name)
+  form.append('product_name_ja', result.name)
+  form.append('lang', 'ja')
+  form.append('lc', 'ja')
+  form.append('serving_size', `${result.grams}g`)
+  form.append('nutriment_energy-kcal', String(per100g.calories))
+  form.append('nutriment_energy-kcal_unit', 'kcal')
+  form.append('nutriment_proteins', String(per100g.protein))
+  form.append('nutriment_proteins_unit', 'g')
+  form.append('nutriment_fat', String(per100g.fat))
+  form.append('nutriment_fat_unit', 'g')
+  form.append('nutriment_carbohydrates', String(per100g.carbs))
+  form.append('nutriment_carbohydrates_unit', 'g')
+  form.append('nutriment_fiber', String(per100g.fiber))
+  form.append('nutriment_fiber_unit', 'g')
+  form.append('nutriment_sodium', String(per100g.na / 1000))
+  form.append('nutriment_sodium_unit', 'g')
+  form.append('app_name', 'fitlog')
+  form.append('app_version', '1.0')
+
   await fetch('https://world.openfoodfacts.org/cgi/product_jqm2.pl', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'User-Agent': 'fitlog/1.0',
-    },
-    body: params.toString(),
+    headers: { 'User-Agent': 'fitlog/1.0' },
+    body: form,
   })
-  // レスポンスエラーは無視（投稿のベストエフォート）
+
+  // ② 栄養成分ラベル画像をアップロード（撮影した写真を nutrition_ja として登録）
+  if (labelBase64 && labelMimeType) {
+    const ext = labelMimeType.includes('png') ? 'png' : 'jpg'
+    const blob = base64ToBlob(labelBase64, labelMimeType)
+    const imgForm = new FormData()
+    imgForm.append('code', barcode)
+    imgForm.append('imagefield', 'nutrition_ja')
+    imgForm.append('imgupload_nutrition_ja', blob, `nutrition.${ext}`)
+    imgForm.append('app_name', 'fitlog')
+    imgForm.append('app_version', '1.0')
+
+    await fetch('https://world.openfoodfacts.org/cgi/product_image_upload.pl', {
+      method: 'POST',
+      headers: { 'User-Agent': 'fitlog/1.0' },
+      body: imgForm,
+    })
+  }
 }
 
 // 100g あたりの栄養素（Open Food Facts 投稿用）

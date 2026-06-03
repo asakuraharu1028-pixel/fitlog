@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
+import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { analyzeFoodText, analyzeFoodImage, analyzeFoodLabel, getApiKey, type AiFoodResult } from '../lib/gemini'
@@ -48,7 +49,13 @@ export default function Meal() {
   const { data, saveData } = useAppStore()
   const today = localDateStr()
 
-  const [mealType, setMealType] = useState<MealType>('breakfast')
+  const [mealType, setMealType] = useState<MealType>(() => {
+    const order: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack']
+    const registered = new Set(
+      data.mealLogs.filter(m => m.date === today).map(m => m.mealType)
+    )
+    return order.find(t => !registered.has(t)) ?? 'snack'
+  })
 
   const handleMealTypeChange = (t: MealType) => {
     setMealType(t)
@@ -65,7 +72,6 @@ export default function Meal() {
   const [labelPreviewUrl, setLabelPreviewUrl] = useState<string | null>(null)
   const [labelImageType, setLabelImageType] = useState<string>('image/jpeg')
   const [submitting, setSubmitting] = useState(false)
-  const labelFileRef = useRef<HTMLInputElement>(null)
   const [textInput, setTextInput] = useState('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [imageBase64, setImageBase64] = useState<string | null>(null)
@@ -77,7 +83,6 @@ export default function Meal() {
   const [advice, setAdvice] = useState<string | null>(null)
   const [adviceLoading, setAdviceLoading] = useState(false)
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   const hasApiKey = !!getApiKey()
 
@@ -107,19 +112,23 @@ export default function Meal() {
 
   const goalCal = data.settings.goalCalories ?? 2000
 
-  // 画像選択
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImageType(file.type)
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string
-      setPreviewUrl(dataUrl)
-      // base64部分のみ抽出
-      setImageBase64(dataUrl.split(',')[1])
+  // 画像選択（ネイティブカメラ）
+  const handleImageCapture = async () => {
+    try {
+      const photo = await CapCamera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+        correctOrientation: true,
+      })
+      if (!photo.dataUrl) return
+      setPreviewUrl(photo.dataUrl)
+      setImageBase64(photo.dataUrl.split(',')[1])
+      setImageType(`image/${photo.format}`)
+    } catch {
+      // キャンセルは無視
     }
-    reader.readAsDataURL(file)
   }
 
   // AI解析実行
@@ -182,17 +191,22 @@ export default function Meal() {
     }
   }
 
-  const handleLabelImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setLabelImageType(file.type)
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string
-      setLabelPreviewUrl(dataUrl)
-      setLabelBase64(dataUrl.split(',')[1])
+  const handleLabelCapture = async () => {
+    try {
+      const photo = await CapCamera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+        correctOrientation: true,
+      })
+      if (!photo.dataUrl) return
+      setLabelPreviewUrl(photo.dataUrl)
+      setLabelBase64(photo.dataUrl.split(',')[1])
+      setLabelImageType(`image/${photo.format}`)
+    } catch {
+      // キャンセルは無視
     }
-    reader.readAsDataURL(file)
   }
 
   const handleAnalyzeLabel = async () => {
@@ -219,7 +233,11 @@ export default function Meal() {
       if (pendingBarcode && results.length > 0) {
         setSubmitting(true)
         const per100g = toPer100g(results[0])
-        await submitToOpenFoodFacts(pendingBarcode, results[0], per100g)
+        await submitToOpenFoodFacts(
+          pendingBarcode, results[0], per100g,
+          labelBase64 ?? undefined,
+          labelImageType ?? undefined,
+        )
         setSubmitting(false)
         setPendingBarcode(null)
       }
@@ -406,8 +424,6 @@ export default function Meal() {
             {pendingBarcode && (
               <p className="text-xs text-gray-400">バーコード: <span className="font-mono">{pendingBarcode}</span></p>
             )}
-            <input ref={labelFileRef} type="file" accept="image/*" capture="environment"
-              className="hidden" onChange={handleLabelImageSelect} />
             {labelPreviewUrl ? (
               <div className="relative">
                 <img src={labelPreviewUrl} alt="ラベル" className="w-full rounded-xl object-cover max-h-48" />
@@ -417,7 +433,7 @@ export default function Meal() {
                 </button>
               </div>
             ) : (
-              <button onClick={() => labelFileRef.current?.click()}
+              <button onClick={handleLabelCapture}
                 className="w-full border-2 border-dashed border-purple-200 rounded-xl py-8 flex flex-col items-center gap-2 text-purple-600 hover:bg-purple-50 transition">
                 <Camera size={32} />
                 <span className="text-sm">栄養成分表示を撮影</span>
@@ -438,8 +454,6 @@ export default function Meal() {
               <span className="text-sm font-medium text-gray-600">食事の写真を選択</span>
               <button onClick={reset} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
             </div>
-            <input ref={fileRef} type="file" accept="image/*" capture="environment"
-              className="hidden" onChange={handleImageSelect} />
             {previewUrl ? (
               <div className="relative">
                 <img src={previewUrl} alt="食事" className="w-full rounded-xl object-cover max-h-48" />
@@ -449,10 +463,10 @@ export default function Meal() {
                 </button>
               </div>
             ) : (
-              <button onClick={() => fileRef.current?.click()}
+              <button onClick={handleImageCapture}
                 className="w-full border-2 border-dashed border-green-200 rounded-xl py-8 flex flex-col items-center gap-2 text-green-600 hover:bg-green-50 transition">
                 <Camera size={32} />
-                <span className="text-sm">タップして写真を選択</span>
+                <span className="text-sm">タップして撮影</span>
               </button>
             )}
             {previewUrl && !results && (
@@ -474,25 +488,48 @@ export default function Meal() {
         {/* AI解析結果 */}
         {results && (
           <div className="mt-3 space-y-2">
-            <p className="text-sm font-semibold text-gray-700">解析結果（タップで削除）</p>
+            <p className="text-sm font-semibold text-gray-700">解析結果（編集できます）</p>
             {results.map((r, i) => (
-              <div key={i} className="flex items-start justify-between bg-gray-50 rounded-xl px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">{r.name}（{r.grams}g）</p>
-                  <p className="text-xs text-gray-400">
-                    {r.calories}kcal｜P:{r.protein}g F:{r.fat}g C:{r.carbs}g
-                  </p>
-                  <details className="mt-1">
-                    <summary className="text-xs text-green-600 cursor-pointer">五大栄養素</summary>
-                    <p className="text-xs text-gray-400 mt-1">
-                      食物繊維:{r.fiber}g／VitA:{r.vitA}μg／VitC:{r.vitC}mg／VitD:{r.vitD}μg
-                      ／Ca:{r.ca}mg／Fe:{r.fe}mg／Na:{r.na}mg
-                    </p>
-                  </details>
+              <div key={i} className="bg-gray-50 rounded-xl px-3 py-2 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={r.name}
+                    onChange={e => setResults(prev => prev?.map((x, j) => j === i ? { ...x, name: e.target.value } : x) ?? null)}
+                    className="flex-1 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-400"
+                    placeholder="商品名"
+                  />
+                  <button onClick={() => removeResult(i)} className="text-gray-300 hover:text-red-400 shrink-0">
+                    <X size={16} />
+                  </button>
                 </div>
-                <button onClick={() => removeResult(i)} className="text-gray-300 hover:text-red-400 mt-1">
-                  <X size={16} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={r.grams}
+                    onChange={e => setResults(prev => prev?.map((x, j) => j === i ? { ...x, grams: Number(e.target.value) } : x) ?? null)}
+                    className="w-20 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-400"
+                  />
+                  <span className="text-xs text-gray-400">g</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {([
+                    { key: 'calories', label: 'kcal', color: 'focus:ring-green-400' },
+                    { key: 'protein',  label: 'P',    color: 'focus:ring-blue-400' },
+                    { key: 'fat',      label: 'F',    color: 'focus:ring-yellow-400' },
+                    { key: 'carbs',    label: 'C',    color: 'focus:ring-orange-400' },
+                  ] as const).map(({ key, label, color }) => (
+                    <div key={key} className="flex items-center gap-1">
+                      <span className="text-xs text-gray-400">{label}:</span>
+                      <input
+                        type="number"
+                        value={r[key]}
+                        onChange={e => setResults(prev => prev?.map((x, j) => j === i ? { ...x, [key]: Number(e.target.value) } : x) ?? null)}
+                        className={`w-16 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 ${color}`}
+                      />
+                      {key !== 'calories' && <span className="text-xs text-gray-400">g</span>}
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
             <div className="flex gap-2 pt-1">
