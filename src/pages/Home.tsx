@@ -27,7 +27,13 @@ export default function Home() {
   const todayCardio   = data.cardioLogs.filter((c) => c.date === today)
   const todayStrength = data.strengthLogs.filter((s) => s.date === today)
   const todaySleep    = (data.sleepLogs ?? []).filter((s) => s.date === today)
-  const todaySteps    = (data.stepLogs  ?? []).filter((s) => s.date === today).reduce((sum, s) => sum + s.steps, 0)
+  // 歩数：今日のデータがなければ最新日のデータを表示
+  const sortedStepLogs = (data.stepLogs ?? []).slice().sort((a, b) => b.date.localeCompare(a.date))
+  const latestStepLog  = sortedStepLogs[0]
+  const todayStepLog   = sortedStepLogs.find(s => s.date === today)
+  const displayStepLog = todayStepLog ?? latestStepLog
+  const todaySteps     = displayStepLog?.steps ?? 0
+  const stepsIsToday   = displayStepLog?.date === today
 
   // 歩数の消費カロリー推定（体重 × 歩数 × 0.0005 kcal）
   const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight ?? 60
@@ -141,10 +147,11 @@ export default function Home() {
       </div>
 
       {/* 歩数 */}
-      {todaySteps > 0 && (
+      {displayStepLog && (
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
-            <Footprints size={14} className="text-teal-400" /> 今日の歩数
+            <Footprints size={14} className="text-teal-400" />
+            {stepsIsToday ? '今日の歩数' : `歩数（${displayStepLog.date}）`}
           </h2>
           <div className="flex items-end gap-4">
             <div>
