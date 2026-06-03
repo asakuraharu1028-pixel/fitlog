@@ -15,7 +15,7 @@ async function callAI(prompt: string): Promise<string> {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'moonshotai/kimi-k2.6:free',
+        model: 'google/gemma-4-26b-a4b-it:free',
         messages: [
           { role: 'system', content: 'あなたは健康管理アドバイザーです。短く具体的な日本語でアドバイスしてください。1〜2文で。' },
           { role: 'user', content: prompt },
