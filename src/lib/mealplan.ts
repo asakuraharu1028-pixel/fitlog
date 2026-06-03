@@ -36,7 +36,7 @@ function buildPrompt(goalCalories: number): string {
 - カロリー配分目安: 朝食 ${breakfastCal}kcal、昼食 ${lunchCal}kcal、夕食 ${dinnerCal}kcal、間食 ${snackCal}kcal
 - プロテインサプリメントは1日最大30gまで（間食に組み込み可）
 - 夕食の構成: 主菜・主食・副菜(1〜2種)・汁物（省略・変更も可）
-- レシピ検索URLは cookpad.com の検索URL形式で記載（例: https://cookpad.com/search/鶏照り焼き）
+- レシピURLは https://oishi-kenko.com/recipes?q=料理名 の形式で記載（例: https://oishi-kenko.com/recipes?q=鶏照り焼き）
 - 7日間で食材・料理が偏らないよう多様な献立にする
 - 栄養バランス（P:F:C = 15-20% : 20-25% : 55-65%）を意識する
 

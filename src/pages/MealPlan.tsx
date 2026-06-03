@@ -37,7 +37,7 @@ function DishRow({ dish }: { dish: MealPlanDish }) {
         <span className="text-xs font-medium text-gray-600">{dish.calories}kcal</span>
         {dish.searchUrl && (
           <a href={dish.searchUrl} target="_blank" rel="noopener noreferrer"
-            className="text-blue-400 hover:text-blue-600 transition" title="レシピを検索">
+            className="text-blue-400 hover:text-blue-600 transition" title="おいしい健康でレシピを検索">
             <ExternalLink size={12} />
           </a>
         )}
@@ -243,7 +243,7 @@ export default function MealPlan() {
           ))}
           <p className="text-xs text-center text-gray-400 pb-2">
             <ExternalLink size={10} className="inline mr-1" />
-            料理名横のアイコンからレシピを検索できます
+            料理名横のアイコンから「おいしい健康」でレシピを検索できます
           </p>
         </div>
       )}
