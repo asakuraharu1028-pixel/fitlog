@@ -52,6 +52,7 @@ export default function Calendar() {
   const exerciseDates = new Set([
     ...data.cardioLogs.map(c => c.date),
     ...data.strengthLogs.map(s => s.date),
+    ...(data.stepLogs ?? []).map(l => l.date),
   ])
 
   const dotsFor = (dateStr: string): DayDots => ({
@@ -68,6 +69,7 @@ export default function Calendar() {
   const selBody     = selected ? data.bodyRecords.find(r => r.date === selected) : null
   const selCardio   = selected ? data.cardioLogs.filter(c => c.date === selected) : []
   const selStrength = selected ? data.strengthLogs.filter(s => s.date === selected) : []
+  const selSteps    = selected ? (data.stepLogs ?? []).find(l => l.date === selected) : null
 
   const totalCal = selMeals.reduce((s, m: MealLog) => s + m.entries.reduce((ss, e) => ss + e.calories, 0), 0)
 
@@ -198,10 +200,16 @@ export default function Calendar() {
           )}
 
           {/* 運動 */}
-          {(selCardio.length > 0 || selStrength.length > 0) ? (
+          {(selCardio.length > 0 || selStrength.length > 0 || selSteps) ? (
             <div>
               <p className="text-xs font-semibold text-gray-500 mb-2">運動</p>
               <div className="space-y-1">
+                {selSteps && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-700">歩数</span>
+                    <span className="text-xs text-orange-500">{selSteps.steps.toLocaleString()} 歩</span>
+                  </div>
+                )}
                 {selCardio.map(c => (
                   <div key={c.id} className="flex justify-between text-sm">
                     <span className="text-gray-700">{c.name}</span>
