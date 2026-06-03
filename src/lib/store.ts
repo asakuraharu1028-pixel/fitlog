@@ -27,6 +27,7 @@ function migrateUtcDates(data: AppData): AppData {
     cardioLogs:  data.cardioLogs.map(r => ({ ...r, date: fixDate(r.date) })),
     strengthLogs: data.strengthLogs.map(r => ({ ...r, date: fixDate(r.date) })),
     sleepLogs:   (data.sleepLogs ?? []).map(r => ({ ...r, date: fixDate(r.date) })),
+    stepLogs:    (data.stepLogs  ?? []).map(r => ({ ...r, date: fixDate(r.date) })),
   }
 }
 
@@ -38,6 +39,7 @@ const DEFAULT_DATA: AppData = {
   cardioLogs: [],
   strengthLogs: [],
   sleepLogs: [],
+  stepLogs: [],
   settings: { heightCm: 170 },
 }
 

@@ -3,7 +3,7 @@ import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
 import { getApiKey } from '../lib/gemini'
-import { Sparkles, RefreshCw, Moon } from 'lucide-react'
+import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell } from 'lucide-react'
 
 function todayStr() {
   return localDateStr()
@@ -27,13 +27,19 @@ export default function Home() {
   const todayCardio   = data.cardioLogs.filter((c) => c.date === today)
   const todayStrength = data.strengthLogs.filter((s) => s.date === today)
   const todaySleep    = (data.sleepLogs ?? []).filter((s) => s.date === today)
+  const todaySteps    = (data.stepLogs  ?? []).filter((s) => s.date === today).reduce((sum, s) => sum + s.steps, 0)
+
+  // 歩数の消費カロリー推定（体重 × 歩数 × 0.0005 kcal）
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight ?? 60
+  const stepsCalories = Math.round(todaySteps * weightKg * 0.0005)
 
   const totalCaloriesIn = todayMeals.reduce(
     (sum, m) => sum + m.entries.reduce((s, e) => s + e.calories, 0), 0
   )
   const totalCaloriesOut =
     todayCardio.reduce((sum, c) => sum + c.caloriesBurned, 0) +
-    todayStrength.reduce((sum, s) => sum + (s.estimatedCalories ?? 0), 0)
+    todayStrength.reduce((sum, s) => sum + (s.estimatedCalories ?? 0), 0) +
+    stepsCalories
 
   // 今日の合計PFC・塩分
   const allEntries = todayMeals.flatMap(m => m.entries)
@@ -133,6 +139,63 @@ export default function Home() {
           <p className="text-gray-400 text-sm">未記録（Health Connect から同期できます）</p>
         )}
       </div>
+
+      {/* 歩数 */}
+      {todaySteps > 0 && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
+            <Footprints size={14} className="text-teal-400" /> 今日の歩数
+          </h2>
+          <div className="flex items-end gap-4">
+            <div>
+              <span className="text-2xl font-bold text-teal-500">{todaySteps.toLocaleString()}</span>
+              <span className="text-sm text-gray-400 ml-1">歩</span>
+            </div>
+            <div className="mb-0.5">
+              <span className="text-sm text-orange-500 font-semibold">{stepsCalories} kcal</span>
+              <span className="text-xs text-gray-400 ml-1">消費</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 今日の運動 */}
+      {(todayCardio.length > 0 || todayStrength.length > 0) && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
+            <Dumbbell size={14} className="text-orange-400" /> 今日の運動
+          </h2>
+          <div className="space-y-2">
+            {todayCardio.map((c) => (
+              <div key={c.id} className="flex justify-between items-center text-sm">
+                <span className="text-gray-700">{c.name}</span>
+                <div className="flex gap-3 text-xs text-gray-500">
+                  <span>{c.durationMin}分</span>
+                  <span className="text-orange-500 font-semibold">{c.caloriesBurned} kcal</span>
+                </div>
+              </div>
+            ))}
+            {todayStrength.map((s) => (
+              <div key={s.id} className="flex justify-between items-center text-sm">
+                <span className="text-gray-700">{s.name}</span>
+                <div className="flex gap-3 text-xs text-gray-500">
+                  <span>{s.sets.length}セット</span>
+                  {s.estimatedCalories != null && (
+                    <span className="text-orange-500 font-semibold">{s.estimatedCalories} kcal</span>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div className="pt-2 border-t border-gray-100 flex justify-end">
+              <span className="text-xs text-gray-500">合計消費 </span>
+              <span className="text-sm font-bold text-orange-500 ml-1">
+                {todayCardio.reduce((s, c) => s + c.caloriesBurned, 0) +
+                 todayStrength.reduce((s, t) => s + (t.estimatedCalories ?? 0), 0)} kcal
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 今日の食事 */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">

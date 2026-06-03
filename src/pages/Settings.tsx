@@ -254,11 +254,20 @@ export default function Settings() {
                 const today = localDateStr()
                 const past30 = localDateStr(new Date(Date.now() - 30 * 86400000))
 
-                // 歩数を読み込み（表示のみ）
+                // 歩数を HC から読み込んで FitLog に保存
                 logs.push('歩数を読み込み中...')
                 setHcLog([...logs])
                 const steps = await hcReadSteps(past30, today)
                 logs.push(`✓ 歩数: ${steps.length}件`)
+                if (steps.length > 0) {
+                  const { data: stepsData, saveData: stepsSave } = useAppStore.getState()
+                  const stepsMap = new Map((stepsData.stepLogs ?? []).map((s: { date: string; steps: number }) => [s.date, s.steps]))
+                  for (const s of steps as { date: string; steps: number }[]) {
+                    stepsMap.set(s.date, (stepsMap.get(s.date) ?? 0) + s.steps)
+                  }
+                  const newStepLogs = Array.from(stepsMap.entries()).map(([date, st]) => ({ date, steps: st }))
+                  await stepsSave({ stepLogs: newStepLogs })
+                }
 
                 // 体重を HC から読み込んで FitLog に追加
                 logs.push('体重を HC から読み込み中...')

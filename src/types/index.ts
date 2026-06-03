@@ -68,12 +68,18 @@ export interface SleepLog {
   durationMin: number
 }
 
+export interface StepLog {
+  date: string   // YYYY-MM-DD
+  steps: number
+}
+
 export interface AppData {
   bodyRecords: BodyRecord[]
   mealLogs: MealLog[]
   cardioLogs: CardioLog[]
   strengthLogs: StrengthLog[]
   sleepLogs: SleepLog[]
+  stepLogs: StepLog[]
   settings: {
     heightCm: number
     goalWeightKg?: number
