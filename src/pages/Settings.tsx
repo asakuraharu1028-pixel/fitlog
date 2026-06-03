@@ -42,7 +42,7 @@ function calcGoals(
   bmr: number,
   goalMonths: number,
   policy: DietPolicy,
-): { intake: number; burn: number } | null {
+): { intake: number; burn: number; dailyDeficit: number } | null {
   if (currentWeight <= 0 || goalWeight <= 0 || bmr <= 0 || goalMonths <= 0) return null
   // 1kg 脂肪 ≈ 7200 kcal
   const totalDeficit = (currentWeight - goalWeight) * 7200
@@ -52,7 +52,39 @@ function calcGoals(
   const ratio = POLICY_RATIO[policy]
   const intake = Math.round(tdee - dailyDeficit * ratio.meal)
   const burn   = Math.round(Math.max(0, dailyDeficit * ratio.exercise))
-  return { intake: Math.max(1000, intake), burn }
+  return { intake: Math.max(1000, intake), burn, dailyDeficit }
+}
+
+type WarnLevel = 'danger' | 'caution'
+interface Warning { level: WarnLevel; message: string }
+
+function getWarnings(goals: { intake: number; burn: number; dailyDeficit: number }): Warning[] {
+  const w: Warning[] = []
+  const { intake, burn, dailyDeficit } = goals
+
+  // 摂取カロリー
+  if (intake < 1200) {
+    w.push({ level: 'danger',  message: `目標摂取カロリー（${intake} kcal）が健康的な最低ライン（1,200 kcal）を下回っています。目標期間を延ばすか、方針を見直してください。` })
+  } else if (intake < 1500) {
+    w.push({ level: 'caution', message: `目標摂取カロリー（${intake} kcal）はかなり厳しい制限です。長期間の継続には注意が必要です。` })
+  }
+
+  // 消費カロリー（運動）
+  if (burn > 1000) {
+    w.push({ level: 'danger',  message: `目標消費カロリー（運動）が ${burn} kcal と非常に多く、現実的ではありません。目標期間を延ばすか、方針を変更してください。` })
+  } else if (burn > 700) {
+    w.push({ level: 'caution', message: `目標消費カロリー（運動）が ${burn} kcal と多めです。毎日の運動習慣が必要になります。` })
+  }
+
+  // ペース（1ヶ月あたりの減量）
+  const kgPerMonth = (dailyDeficit * 30) / 7200
+  if (kgPerMonth > 4) {
+    w.push({ level: 'danger',  message: `月 ${kgPerMonth.toFixed(1)} kg ペースは急激すぎます。健康的なペースの目安は月 2 kg 以内です。` })
+  } else if (kgPerMonth > 2) {
+    w.push({ level: 'caution', message: `月 ${kgPerMonth.toFixed(1)} kg ペースは一般的な推奨（月 2 kg 以内）を超えています。無理のない範囲で進めましょう。` })
+  }
+
+  return w
 }
 
 export default function Settings() {
@@ -217,19 +249,48 @@ export default function Settings() {
           </div>
 
           {/* 自動計算結果 */}
-          {goals ? (
-            <div className="rounded-xl bg-orange-50 p-3 space-y-2">
-              <p className="text-xs font-semibold text-orange-700 mb-1">📊 自動計算された1日の目標</p>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">目標摂取カロリー</span>
-                <span className="font-bold text-green-600">{goals.intake.toLocaleString()} kcal</span>
+          {goals ? (() => {
+            const warnings = getWarnings(goals)
+            const hasDanger  = warnings.some(w => w.level === 'danger')
+            return (
+              <div className="space-y-2">
+                <div className={`rounded-xl p-3 space-y-2 ${hasDanger ? 'bg-red-50' : 'bg-orange-50'}`}>
+                  <p className="text-xs font-semibold text-orange-700 mb-1">📊 自動計算された1日の目標</p>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">目標摂取カロリー</span>
+                    <span className={`font-bold ${goals.intake < 1200 ? 'text-red-500' : 'text-green-600'}`}>
+                      {goals.intake.toLocaleString()} kcal
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">目標消費カロリー（運動）</span>
+                    <span className={`font-bold ${goals.burn > 1000 ? 'text-red-500' : 'text-orange-500'}`}>
+                      {goals.burn.toLocaleString()} kcal
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-1 border-t border-orange-100">
+                    <span className="text-gray-400 text-xs">想定ペース</span>
+                    <span className="text-xs text-gray-500">
+                      月 {((goals.dailyDeficit * 30) / 7200).toFixed(1)} kg
+                    </span>
+                  </div>
+                </div>
+                {warnings.length > 0 && (
+                  <div className="space-y-1.5">
+                    {warnings.map((w, i) => (
+                      <div key={i} className={`flex gap-2 rounded-xl px-3 py-2.5 text-xs
+                        ${w.level === 'danger'
+                          ? 'bg-red-50 text-red-700 border border-red-200'
+                          : 'bg-yellow-50 text-yellow-800 border border-yellow-200'}`}>
+                        <span className="shrink-0 mt-0.5">{w.level === 'danger' ? '🚨' : '⚠️'}</span>
+                        <span>{w.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">目標消費カロリー（運動）</span>
-                <span className="font-bold text-orange-500">{goals.burn.toLocaleString()} kcal</span>
-              </div>
-            </div>
-          ) : (latestWeight != null && goalWeight && goalMonths) ? (
+            )
+          })() : (latestWeight != null && goalWeight && goalMonths) ? (
             <p className="text-xs text-red-400">計算に必要な値を入力してください</p>
           ) : null}
 
