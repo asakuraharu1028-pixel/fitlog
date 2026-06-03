@@ -6,6 +6,7 @@ function isOpenRouterKey(key: string) {
   return key.startsWith('sk-or-')
 }
 
+
 async function callAI(prompt: string): Promise<string> {
   const apiKey = getApiKey()
   if (!apiKey) return ''

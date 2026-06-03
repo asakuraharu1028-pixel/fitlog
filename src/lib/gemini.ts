@@ -58,7 +58,7 @@ async function callOpenRouter(apiKey: string, messages: object[]): Promise<AiFoo
 }
 
 async function callGemini(apiKey: string, parts: object[]): Promise<AiFoodResult[]> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
