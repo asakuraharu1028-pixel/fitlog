@@ -28,6 +28,8 @@ export default function Settings() {
   const [diagRunning, setDiagRunning] = useState(false)
   const [hcLog, setHcLog] = useState<string[]>([])
   const [hcRunning, setHcRunning] = useState(false)
+  const [reloadMsg, setReloadMsg] = useState<string | null>(null)
+  const [reloading, setReloading] = useState(false)
 
   useEffect(() => {
     setHeight(String(data.settings.heightCm))
@@ -186,11 +188,27 @@ export default function Settings() {
       <div className="bg-white rounded-2xl p-4 shadow-sm">
         <h2 className="font-semibold text-gray-700 mb-2">Drive 同期</h2>
         <button
-          onClick={async () => { await loadData() }}
-          className="w-full bg-blue-500 text-white rounded-xl py-2.5 font-semibold hover:bg-blue-600 transition"
+          onClick={async () => {
+            setReloading(true)
+            setReloadMsg(null)
+            try {
+              await loadData()
+              const { data: d } = useAppStore.getState()
+              setReloadMsg(`✓ 読み込み完了（歩数: ${(d.stepLogs ?? []).length}件、体重: ${d.bodyRecords.length}件）`)
+            } catch (e) {
+              setReloadMsg(`✗ エラー: ${e instanceof Error ? e.message : String(e)}`)
+            } finally {
+              setReloading(false)
+            }
+          }}
+          disabled={reloading}
+          className="w-full bg-blue-500 text-white rounded-xl py-2.5 font-semibold hover:bg-blue-600 disabled:opacity-40 transition"
         >
-          Drive から再読み込み
+          {reloading ? '読み込み中...' : 'Drive から再読み込み'}
         </button>
+        {reloadMsg && (
+          <p className={`text-xs mt-1 ${reloadMsg.startsWith('✗') ? 'text-red-500' : 'text-green-600'}`}>{reloadMsg}</p>
+        )}
         <p className="text-xs text-gray-400 mt-1">Android で同期後、このボタンで Web に反映できます</p>
       </div>
 
