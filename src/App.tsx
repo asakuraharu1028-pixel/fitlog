@@ -25,6 +25,7 @@ import Body from './pages/Body'
 import Report from './pages/Report'
 import Calendar from './pages/Calendar'
 import Settings from './pages/Settings'
+import MealPlan from './pages/MealPlan'
 import OAuthCallback from './pages/OAuthCallback'
 
 export default function App() {
@@ -79,6 +80,7 @@ export default function App() {
                   <Route path="calendar" element={<Calendar />} />
                   <Route path="report" element={<Report />} />
                   <Route path="settings" element={<Settings />} />
+                  <Route path="mealplan" element={<MealPlan />} />
                 </Route>
               </Routes>
             )

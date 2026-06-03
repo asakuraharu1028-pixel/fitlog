@@ -1,0 +1,261 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles } from 'lucide-react'
+import { useAppStore } from '../lib/store'
+import { getApiKey } from '../lib/gemini'
+import { generateWeeklyMealPlan, loadSavedMealPlan } from '../lib/mealplan'
+import type { WeeklyMealPlan, DayMealPlan, MealPlanDish, DinnerPlan } from '../types'
+
+function calcDayTotal(day: DayMealPlan): number {
+  const bfCal = day.breakfast.reduce((s, d) => s + d.calories, 0)
+  const lCal  = day.lunch.reduce((s, d) => s + d.calories, 0)
+  const dCal  = day.dinner.main.calories + day.dinner.staple.calories +
+    day.dinner.sides.reduce((s, d) => s + d.calories, 0) +
+    (day.dinner.soup?.calories ?? 0)
+  const sCal  = (day.snack ?? []).reduce((s, d) => s + d.calories, 0)
+  return bfCal + lCal + dCal + sCal
+}
+
+function calcMacros(dishes: MealPlanDish[]) {
+  return dishes.reduce(
+    (acc, d) => ({ p: acc.p + d.protein, f: acc.f + d.fat, c: acc.c + d.carbs }),
+    { p: 0, f: 0, c: 0 }
+  )
+}
+
+function DishRow({ dish }: { dish: MealPlanDish }) {
+  return (
+    <div className="flex items-start justify-between py-1.5 border-b border-gray-50 last:border-0 gap-2">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-gray-700 leading-snug">{dish.name}</p>
+        {dish.note && <p className="text-xs text-gray-400 mt-0.5">{dish.note}</p>}
+        <p className="text-xs text-gray-400">
+          P:{Math.round(dish.protein * 10) / 10}g F:{Math.round(dish.fat * 10) / 10}g C:{Math.round(dish.carbs * 10) / 10}g
+        </p>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="text-xs font-medium text-gray-600">{dish.calories}kcal</span>
+        {dish.searchUrl && (
+          <a href={dish.searchUrl} target="_blank" rel="noopener noreferrer"
+            className="text-blue-400 hover:text-blue-600 transition" title="レシピを検索">
+            <ExternalLink size={12} />
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DinnerSection({ dinner }: { dinner: DinnerPlan }) {
+  const totalCal = dinner.main.calories + dinner.staple.calories +
+    dinner.sides.reduce((s, d) => s + d.calories, 0) +
+    (dinner.soup?.calories ?? 0)
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 mb-1">
+        <span className="text-xs font-semibold text-orange-500">夕食</span>
+        <span className="text-xs text-gray-400 ml-auto">{totalCal}kcal</span>
+      </div>
+      <div className="pl-2 border-l-2 border-orange-100 space-y-0.5">
+        <p className="text-[10px] text-orange-400 font-medium">主菜</p>
+        <DishRow dish={dinner.main} />
+        <p className="text-[10px] text-orange-400 font-medium mt-1">主食</p>
+        <DishRow dish={dinner.staple} />
+        {dinner.sides.length > 0 && (
+          <>
+            <p className="text-[10px] text-orange-400 font-medium mt-1">副菜</p>
+            {dinner.sides.map((s, i) => <DishRow key={i} dish={s} />)}
+          </>
+        )}
+        {dinner.soup && (
+          <>
+            <p className="text-[10px] text-orange-400 font-medium mt-1">汁物</p>
+            <DishRow dish={dinner.soup} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MealSection({ label, dishes, color }: { label: string; dishes: MealPlanDish[]; color: string }) {
+  if (!dishes || dishes.length === 0) return null
+  const total = dishes.reduce((s, d) => s + d.calories, 0)
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1 mb-1">
+        <span className={`text-xs font-semibold ${color}`}>{label}</span>
+        <span className="text-xs text-gray-400 ml-auto">{total}kcal</span>
+      </div>
+      {dishes.map((d, i) => <DishRow key={i} dish={d} />)}
+    </div>
+  )
+}
+
+function DayCard({ day, index }: { day: DayMealPlan; index: number }) {
+  const [open, setOpen] = useState(index === 0)
+  const total = calcDayTotal(day)
+  const allDishes = [
+    ...day.breakfast,
+    ...day.lunch,
+    day.dinner.main, day.dinner.staple, ...day.dinner.sides,
+    ...(day.dinner.soup ? [day.dinner.soup] : []),
+    ...(day.snack ?? []),
+  ]
+  const macros = calcMacros(allDishes)
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition"
+        onClick={() => setOpen(v => !v)}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-bold text-gray-700">{day.dayLabel}</span>
+          <span className="text-xs text-gray-400">
+            P:{Math.round(macros.p)}g F:{Math.round(macros.f)}g C:{Math.round(macros.c)}g
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-green-600">{total}kcal</span>
+          {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        </div>
+      </button>
+
+      {open && (
+        <div className="border-t border-gray-100 px-4 py-3 space-y-4">
+          <MealSection label="朝食" dishes={day.breakfast} color="text-yellow-500" />
+          <MealSection label="昼食" dishes={day.lunch} color="text-blue-500" />
+          <DinnerSection dinner={day.dinner} />
+          {day.snack && day.snack.length > 0 && (
+            <MealSection label="間食" dishes={day.snack} color="text-purple-500" />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function MealPlan() {
+  const navigate = useNavigate()
+  const { data } = useAppStore()
+  const hasApiKey = !!getApiKey()
+
+  const [plan, setPlan] = useState<WeeklyMealPlan | null>(() => loadSavedMealPlan())
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const goalCalories = data.settings.goalCalories ?? 2000
+
+  useEffect(() => {
+    const saved = loadSavedMealPlan()
+    if (saved) setPlan(saved)
+  }, [])
+
+  const handleGenerate = async () => {
+    setError(null)
+    setGenerating(true)
+    try {
+      const newPlan = await generateWeeklyMealPlan(goalCalories)
+      setPlan(newPlan)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'エラーが発生しました')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* ヘッダー */}
+      <div className="flex items-center gap-3">
+        <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-600 transition">
+          <ArrowLeft size={20} />
+        </button>
+        <h1 className="text-lg font-bold text-gray-800">週間献立プラン</h1>
+      </div>
+
+      {/* 目標カロリー表示 */}
+      <div className="bg-green-50 rounded-2xl px-4 py-3 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-green-600 font-medium">目標摂取カロリー</p>
+          <p className="text-2xl font-bold text-green-700">{goalCalories}<span className="text-sm font-normal ml-1">kcal/日</span></p>
+        </div>
+        {plan && (
+          <p className="text-xs text-gray-400">
+            生成: {new Date(plan.createdAt).toLocaleDateString('ja-JP')}
+          </p>
+        )}
+      </div>
+
+      {/* APIキー未設定 */}
+      {!hasApiKey && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 text-center">
+          <p className="text-sm text-amber-700 font-medium mb-1">APIキーが必要です</p>
+          <p className="text-xs text-amber-600">設定画面でGemini APIキーを登録してください</p>
+          <button
+            onClick={() => navigate('/settings')}
+            className="mt-3 text-sm text-amber-700 underline"
+          >
+            設定画面へ
+          </button>
+        </div>
+      )}
+
+      {/* 生成ボタン */}
+      {hasApiKey && (
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="w-full bg-green-500 text-white rounded-2xl py-4 font-bold flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-green-600 transition active:scale-95"
+        >
+          {generating ? (
+            <>
+              <RefreshCw size={18} className="animate-spin" />
+              献立を生成中... (少し時間がかかります)
+            </>
+          ) : (
+            <>
+              <Sparkles size={18} />
+              {plan ? '献立を再生成する' : '1週間の献立を生成する'}
+            </>
+          )}
+        </button>
+      )}
+
+      {/* エラー */}
+      {error && (
+        <div className="bg-red-50 text-red-500 text-sm rounded-xl px-4 py-3">
+          {error}
+        </div>
+      )}
+
+      {/* 献立表示 */}
+      {plan && !generating && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-600">7日間の献立</h2>
+            <p className="text-xs text-gray-400">目標 {plan.goalCalories}kcal 基準</p>
+          </div>
+          {plan.days.map((day, i) => (
+            <DayCard key={i} day={day} index={i} />
+          ))}
+          <p className="text-xs text-center text-gray-400 pb-2">
+            <ExternalLink size={10} className="inline mr-1" />
+            料理名横のアイコンからレシピを検索できます
+          </p>
+        </div>
+      )}
+
+      {/* 初期状態（未生成） */}
+      {!plan && !generating && hasApiKey && (
+        <div className="text-center py-12 text-gray-400">
+          <p className="text-4xl mb-3">🍱</p>
+          <p className="text-sm">上のボタンで1週間分の献立を</p>
+          <p className="text-sm">AIが自動生成します</p>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -75,6 +75,39 @@ export interface StepLog {
 
 export type DietPolicy = 'meal' | 'balance' | 'exercise'
 
+export interface MealPlanDish {
+  name: string
+  calories: number
+  protein: number
+  fat: number
+  carbs: number
+  searchUrl?: string | null
+  note?: string | null
+}
+
+export interface DinnerPlan {
+  main: MealPlanDish
+  staple: MealPlanDish
+  sides: MealPlanDish[]
+  soup?: MealPlanDish | null
+}
+
+export interface DayMealPlan {
+  dayLabel: string
+  breakfast: MealPlanDish[]
+  lunch: MealPlanDish[]
+  dinner: DinnerPlan
+  snack?: MealPlanDish[]
+  totalCalories: number
+}
+
+export interface WeeklyMealPlan {
+  id: string
+  createdAt: string
+  goalCalories: number
+  days: DayMealPlan[]
+}
+
 export interface AppData {
   bodyRecords: BodyRecord[]
   mealLogs: MealLog[]

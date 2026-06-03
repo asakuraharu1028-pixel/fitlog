@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
@@ -7,7 +8,7 @@ import { lookupBarcode, BarcodeNotFoundError, submitToOpenFoodFacts, toPer100g }
 import { getMealAdvice } from '../lib/advice'
 import type { MealLog, FoodEntry } from '../types'
 import { nanoid } from 'nanoid'
-import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch } from 'lucide-react'
+import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
@@ -47,6 +48,7 @@ function toFoodEntry(r: AiFoodResult): FoodEntry {
 
 export default function Meal() {
   const { data, saveData } = useAppStore()
+  const navigate = useNavigate()
   const today = localDateStr()
 
   const [mealType, setMealType] = useState<MealType>(() => {
@@ -283,6 +285,19 @@ export default function Meal() {
 
   return (
     <div className="p-4 space-y-4">
+
+      {/* 週間献立プランへのリンク */}
+      <button
+        onClick={() => navigate('/mealplan')}
+        className="w-full flex items-center gap-3 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl px-4 py-3 hover:from-green-100 hover:to-emerald-100 transition"
+      >
+        <CalendarRange size={20} className="text-green-600 shrink-0" />
+        <div className="flex-1 text-left">
+          <p className="text-sm font-semibold text-green-700">週間献立プランを作成</p>
+          <p className="text-xs text-green-600">目標カロリーに合わせた7日分の献立をAIが生成</p>
+        </div>
+        <span className="text-green-400 text-xs">›</span>
+      </button>
 
       {/* AIアドバイス */}
       {(adviceLoading || advice) && (
