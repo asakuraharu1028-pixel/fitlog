@@ -15,7 +15,7 @@ import { nanoid } from 'nanoid'
 import { Eye, EyeOff } from 'lucide-react'
 
 export default function Settings() {
-  const { data, saveData } = useAppStore()
+  const { data, saveData, loadData } = useAppStore()
   const [height, setHeight] = useState(String(data.settings.heightCm))
   const [goalWeight, setGoalWeight] = useState(String(data.settings.goalWeightKg ?? ''))
   const [goalCalories, setGoalCalories] = useState(String(data.settings.goalCalories ?? ''))
@@ -180,6 +180,18 @@ export default function Settings() {
         >
           {apiKeySaved ? '✓ 保存しました' : 'APIキーを保存'}
         </button>
+      </div>
+
+      {/* Drive 再読み込み */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <h2 className="font-semibold text-gray-700 mb-2">Drive 同期</h2>
+        <button
+          onClick={async () => { await loadData() }}
+          className="w-full bg-blue-500 text-white rounded-xl py-2.5 font-semibold hover:bg-blue-600 transition"
+        >
+          Drive から再読み込み
+        </button>
+        <p className="text-xs text-gray-400 mt-1">Android で同期後、このボタンで Web に反映できます</p>
       </div>
 
       {/* Drive 診断 */}
