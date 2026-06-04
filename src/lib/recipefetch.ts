@@ -8,14 +8,47 @@ export interface FetchedRecipe {
   sourceUrl: string
 }
 
-// ── CORSプロキシ経由でHTMLを取得 ────────────────────────────
+// ── CORSプロキシ経由でHTMLを取得（複数プロキシにフォールバック）──
+const CORS_PROXIES: Array<(url: string) => { fetchUrl: string; extract: (r: Response) => Promise<string> }> = [
+  // corsproxy.io: レスポンスが直接HTML
+  (url) => ({
+    fetchUrl: `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    extract:  (r) => r.text(),
+  }),
+  // allorigins.win: JSON包装
+  (url) => ({
+    fetchUrl: `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+    extract:  async (r) => {
+      const data = await r.json() as { contents?: string }
+      if (!data.contents) throw new Error('contents が空です')
+      return data.contents
+    },
+  }),
+  // thingproxy: レスポンスが直接HTML
+  (url) => ({
+    fetchUrl: `https://thingproxy.freeboard.io/fetch/${url}`,
+    extract:  (r) => r.text(),
+  }),
+]
+
 async function fetchHtml(url: string): Promise<string> {
-  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
-  const res = await fetch(proxy, { signal: AbortSignal.timeout(15000) })
-  if (!res.ok) throw new Error(`取得失敗: ${res.status}`)
-  const data = await res.json() as { contents?: string; status?: { http_code: number } }
-  if (!data.contents) throw new Error('ページの内容を取得できませんでした')
-  return data.contents
+  const errors: string[] = []
+  for (const proxyFn of CORS_PROXIES) {
+    const { fetchUrl, extract } = proxyFn(url)
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 12000)
+      const res = await fetch(fetchUrl, { signal: controller.signal })
+      clearTimeout(timer)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const html = await extract(res)
+      if (!html || html.length < 100) throw new Error('取得したHTMLが短すぎます')
+      return html
+    } catch (e) {
+      errors.push(`${fetchUrl.split('?')[0]}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  throw new Error(`ページを取得できませんでした。\n${errors.join('\n')}`)
 }
 
 // ── Schema.org Recipe JSON-LD を抽出 ─────────────────────────
