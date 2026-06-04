@@ -69,7 +69,8 @@ function todayCalorieSummary(data: AppData, goalCalories: number) {
 const MEAL_TYPE_LABEL: Record<string, string> = {
   breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食',
 }
-const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack']
+const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'] as const
+type MealTypeKey = typeof MEAL_ORDER[number]
 
 export async function getMealAdvice(meal: MealLog, data: AppData): Promise<string> {
   const apiKey = getApiKey()
@@ -78,7 +79,7 @@ export async function getMealAdvice(meal: MealLog, data: AppData): Promise<strin
   const goal = data.settings.goalCalories ?? 2000
   const { intake, burned, remaining } = todayCalorieSummary(data, goal)
   const todayLogs = data.mealLogs.filter(m => m.date === meal.date)
-  const registeredTypes = todayLogs.map(m => m.mealType)
+  const registeredTypes = todayLogs.map(m => m.mealType as MealTypeKey)
   const totalProtein = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.protein, 0)
 
   const mealNames = meal.entries.map(e => `${e.foodName}(${e.calories}kcal)`).join('、')
@@ -118,7 +119,7 @@ export async function getMealSuggestion(data: AppData): Promise<string> {
   const goal = data.settings.goalCalories ?? 2000
   const { intake, burned, remaining } = todayCalorieSummary(data, goal)
   const todayLogs = data.mealLogs.filter(m => m.date === today)
-  const registeredTypes = todayLogs.map(m => m.mealType)
+  const registeredTypes = todayLogs.map(m => m.mealType as MealTypeKey)
 
   const unregistered = MEAL_ORDER
     .filter(t => t !== 'snack' && !registeredTypes.includes(t))

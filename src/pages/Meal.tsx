@@ -631,9 +631,10 @@ export default function Meal() {
 
           {/* 残りの献立提案 */}
           {(() => {
-            const MEAL_ORDER = ['breakfast', 'lunch', 'dinner']
+            const MEAL_ORDER = ['breakfast', 'lunch', 'dinner'] as const
+            type MealOrderType = typeof MEAL_ORDER[number]
             const registeredTypes = new Set(
-              useAppStore.getState().data.mealLogs.filter(m => m.date === today).map(m => m.mealType)
+              useAppStore.getState().data.mealLogs.filter(m => m.date === today).map(m => m.mealType as MealOrderType)
             )
             const unregistered = MEAL_ORDER.filter(t => !registeredTypes.has(t))
             if (unregistered.length === 0) return null
