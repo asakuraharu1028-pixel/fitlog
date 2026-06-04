@@ -427,10 +427,14 @@ export default function Meal() {
   }
 
   const handleCsvImport = async (items: TemplateFoodItem[]) => {
-    // 既存と名前が重複しないものだけ追加
+    const importMap = new Map(items.map(t => [t.name, t]))
+    // 既存エントリは CSV の値で上書き（id・手動編集内容は保持）
+    const updated = templateFoods.map(t =>
+      importMap.has(t.name) ? { ...t, ...importMap.get(t.name)!, id: t.id } : t
+    )
     const existingNames = new Set(templateFoods.map(t => t.name))
     const toAdd = items.filter(t => !existingNames.has(t.name))
-    await saveData({ templateFoods: [...templateFoods, ...toAdd] })
+    await saveData({ templateFoods: [...updated, ...toAdd] })
   }
 
   const handleBarcodeDetected = async (code: string) => {
