@@ -146,9 +146,21 @@ export interface WeeklyMealPlan {
   days: DayMealPlan[]
 }
 
+export interface TemplateFoodItem {
+  id: string
+  name: string
+  grams: number
+  calories: number
+  protein: number
+  fat: number
+  carbs: number
+  sodium?: number
+}
+
 export interface AppData {
   bodyRecords: BodyRecord[]
   mealLogs: MealLog[]
+  templateFoods?: TemplateFoodItem[]
   cardioLogs: CardioLog[]
   strengthLogs: StrengthLog[]
   sleepLogs: SleepLog[]

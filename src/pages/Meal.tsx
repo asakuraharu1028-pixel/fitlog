@@ -1,19 +1,212 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { Capacitor } from '@capacitor/core'
 import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { analyzeFoodText, analyzeFoodImage, analyzeFoodLabel, getApiKey, type AiFoodResult } from '../lib/gemini'
 import { lookupBarcode, BarcodeNotFoundError, submitToOpenFoodFacts, toPer100g } from '../lib/barcode'
 import { getMealAdvice } from '../lib/advice'
-import type { MealLog, FoodEntry } from '../types'
+import type { MealLog, FoodEntry, TemplateFoodItem } from '../types'
 import { nanoid } from 'nanoid'
-import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange } from 'lucide-react'
+import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange, BookMarked, Upload } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食',
+}
+
+function TemplateFoodForm({ item, onSave, onCancel }: {
+  item: TemplateFoodItem
+  onSave: (t: TemplateFoodItem) => void
+  onCancel: () => void
+}) {
+  const [form, setForm] = useState(item)
+  const set = (k: keyof TemplateFoodItem, v: string | number) =>
+    setForm(prev => ({ ...prev, [k]: v }))
+  return (
+    <div className="bg-amber-50 rounded-xl px-3 py-3 space-y-2">
+      <input
+        value={form.name}
+        onChange={e => set('name', e.target.value)}
+        placeholder="食品名（例：ザバスホエイプロテイン）"
+        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+      />
+      <div className="flex items-center gap-1.5">
+        <input type="number" value={form.grams}
+          onChange={e => set('grams', Number(e.target.value))}
+          className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400"
+        />
+        <span className="text-xs text-gray-400">g</span>
+      </div>
+      <div className="flex flex-wrap gap-x-2 gap-y-1">
+        {([
+          { k: 'calories', label: 'kcal' },
+          { k: 'protein',  label: 'P(g)' },
+          { k: 'fat',      label: 'F(g)' },
+          { k: 'carbs',    label: 'C(g)' },
+        ] as const).map(({ k, label }) => (
+          <div key={k} className="flex items-center gap-1">
+            <span className="text-xs text-gray-400">{label}:</span>
+            <input type="number" value={(form as Record<string, number>)[k]}
+              onChange={e => set(k, Number(e.target.value))}
+              className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button onClick={onCancel}
+          className="flex-1 border border-gray-200 text-gray-500 rounded-xl py-2 text-sm hover:bg-gray-50 transition">
+          キャンセル
+        </button>
+        <button onClick={() => onSave(form)} disabled={!form.name.trim()}
+          className="flex-1 bg-amber-500 text-white rounded-xl py-2 text-sm font-semibold disabled:opacity-40 hover:bg-amber-600 transition">
+          保存
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function parseTemplateCsv(text: string): TemplateFoodItem[] {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return []
+  // ヘッダー行をスキップ（1行目が数値でなければヘッダーと判断）
+  const firstCols = lines[0].split(',')
+  const startIdx = isNaN(Number(firstCols[1])) ? 1 : 0
+  return lines.slice(startIdx).flatMap(line => {
+    const cols = line.split(',').map(c => c.trim())
+    const [name, grams, calories, protein, fat, carbs, sodium] = cols
+    if (!name || isNaN(Number(calories))) return []
+    return [{
+      id: nanoid(),
+      name,
+      grams: Number(grams) || 100,
+      calories: Number(calories) || 0,
+      protein: Number(protein) || 0,
+      fat: Number(fat) || 0,
+      carbs: Number(carbs) || 0,
+      sodium: sodium ? Number(sodium) : undefined,
+    }]
+  })
+}
+
+function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, onDelete, onSave, onNewTemplate, onCsvImport, onClose }: {
+  templates: TemplateFoodItem[]
+  editingTemplate: TemplateFoodItem | null
+  newTemplate: boolean
+  onAdd: (t: TemplateFoodItem) => void
+  onEdit: (t: TemplateFoodItem) => void
+  onDelete: (id: string) => void
+  onSave: (t: TemplateFoodItem) => void
+  onNewTemplate: () => void
+  onCsvImport: (items: TemplateFoodItem[]) => void
+  onClose: () => void
+}) {
+  const isWeb = Capacitor.getPlatform() === 'web'
+  const [csvError, setCsvError] = useState<string | null>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const text = ev.target?.result as string
+      const items = parseTemplateCsv(text)
+      if (items.length === 0) {
+        setCsvError('有効なデータが見つかりませんでした。フォーマットを確認してください。')
+      } else {
+        setCsvError(null)
+        onCsvImport(items)
+      }
+    }
+    reader.readAsText(file, 'UTF-8')
+    e.target.value = ''
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-2 text-amber-600">
+          <BookMarked size={16} />
+          <span className="text-sm font-medium">テンプレート食品</span>
+        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+      </div>
+
+      {isWeb && (
+        <div>
+          <label className="w-full border border-amber-300 bg-amber-50 rounded-xl py-2.5 text-amber-700 text-xs font-medium flex items-center justify-center gap-2 cursor-pointer hover:bg-amber-100 transition">
+            <Upload size={14} />
+            CSVファイルから一括取込
+            <input type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileChange} />
+          </label>
+          {csvError && <p className="text-xs text-red-500 mt-1 px-1">{csvError}</p>}
+          <p className="text-xs text-gray-400 mt-1 px-1">
+            形式: 名前,グラム,kcal,P(g),F(g),C(g),Na(mg) — 1行目はヘッダー可
+          </p>
+        </div>
+      )}
+
+      {templates.length === 0 && !newTemplate && (
+        <p className="text-xs text-gray-400 text-center py-2">
+          よく食べる食品を登録して素早く追加できます
+        </p>
+      )}
+
+      {templates.map(t => (
+        <div key={t.id}>
+          {editingTemplate?.id === t.id && !newTemplate ? (
+            <TemplateFoodForm
+              item={editingTemplate}
+              onSave={onSave}
+              onCancel={() => onEdit(t)}
+            />
+          ) : (
+            <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
+              <button
+                onClick={() => onAdd(t)}
+                className="flex-1 text-left"
+              >
+                <p className="text-sm font-medium text-gray-700">{t.name}</p>
+                <p className="text-xs text-gray-400">
+                  {t.grams}g｜{t.calories}kcal P:{t.protein}g F:{t.fat}g C:{t.carbs}g
+                </p>
+              </button>
+              <button onClick={() => onEdit(t)} className="text-gray-300 hover:text-amber-400 shrink-0">
+                <Pencil size={14} />
+              </button>
+              <button onClick={() => onDelete(t.id)} className="text-gray-300 hover:text-red-400 shrink-0">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {newTemplate && editingTemplate ? (
+        <TemplateFoodForm
+          item={editingTemplate}
+          onSave={onSave}
+          onCancel={onClose}
+        />
+      ) : (
+        <button
+          onClick={onNewTemplate}
+          className="w-full border-2 border-dashed border-amber-200 rounded-xl py-3 text-amber-500 text-sm font-medium hover:bg-amber-50 transition flex items-center justify-center gap-2"
+        >
+          <Plus size={16} />
+          テンプレートを追加
+        </button>
+      )}
+
+      {templates.length > 0 && (
+        <p className="text-xs text-center text-gray-400">タップして食事に追加</p>
+      )}
+    </div>
+  )
 }
 
 function NutrientBar({ label, value, unit, color, low, high }: {
@@ -74,7 +267,7 @@ export default function Meal() {
     setPreviewUrl(null)
     setImageBase64(null)
   }
-  const [mode, setMode] = useState<'idle' | 'text' | 'image' | 'barcode' | 'label'>('idle')
+  const [mode, setMode] = useState<'idle' | 'text' | 'image' | 'barcode' | 'label' | 'template'>('idle')
   const [pendingBarcode, setPendingBarcode] = useState<string | null>(null)
   const [labelBase64, setLabelBase64] = useState<string | null>(null)
   const [labelPreviewUrl, setLabelPreviewUrl] = useState<string | null>(null)
@@ -91,8 +284,11 @@ export default function Meal() {
   const [advice, setAdvice] = useState<string | null>(null)
   const [adviceLoading, setAdviceLoading] = useState(false)
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null)
+  const [editingTemplate, setEditingTemplate] = useState<TemplateFoodItem | null>(null)
+  const [newTemplate, setNewTemplate] = useState(false)
 
   const hasApiKey = !!getApiKey()
+  const templateFoods = data.templateFoods ?? []
 
   // 今日の食事ログ
   const todayLogs = data.mealLogs
@@ -186,6 +382,36 @@ export default function Meal() {
     setMode('idle'); setResults(null); setError(null)
     setTextInput(''); setPreviewUrl(null); setImageBase64(null)
     setPendingBarcode(null); setLabelBase64(null); setLabelPreviewUrl(null)
+    setEditingTemplate(null); setNewTemplate(false)
+  }
+
+  const handleTemplateAdd = (t: TemplateFoodItem) => {
+    const entry: AiFoodResult = {
+      name: t.name, grams: t.grams, calories: t.calories,
+      protein: t.protein, fat: t.fat, carbs: t.carbs, na: t.sodium ?? 0,
+    }
+    setResults(prev => [...(prev ?? []), entry])
+    setMode('idle')
+  }
+
+  const handleTemplateSave = async (t: TemplateFoodItem) => {
+    const updated = templateFoods.some(x => x.id === t.id)
+      ? templateFoods.map(x => x.id === t.id ? t : x)
+      : [...templateFoods, t]
+    await saveData({ templateFoods: updated })
+    setEditingTemplate(null)
+    setNewTemplate(false)
+  }
+
+  const handleTemplateDelete = async (id: string) => {
+    await saveData({ templateFoods: templateFoods.filter(x => x.id !== id) })
+  }
+
+  const handleCsvImport = async (items: TemplateFoodItem[]) => {
+    // 既存と名前が重複しないものだけ追加
+    const existingNames = new Set(templateFoods.map(t => t.name))
+    const toAdd = items.filter(t => !existingNames.has(t.name))
+    await saveData({ templateFoods: [...templateFoods, ...toAdd] })
   }
 
   const handleBarcodeDetected = async (code: string) => {
@@ -397,12 +623,16 @@ export default function Meal() {
               <span className="text-xs text-gray-400">食べた内容を自由記入</span>
             </button>
             <button onClick={() => setMode('barcode')}
-              className="col-span-2 flex items-center justify-center gap-3 border-2 border-dashed border-purple-200 rounded-xl py-4 text-purple-600 hover:bg-purple-50 transition">
-              <ScanBarcode size={24} />
-              <div className="text-left">
-                <p className="text-sm font-medium">バーコードをスキャン</p>
-                <p className="text-xs text-gray-400">商品のJANコードから栄養素を取得</p>
-              </div>
+              className="flex flex-col items-center gap-2 border-2 border-dashed border-purple-200 rounded-xl py-5 text-purple-600 hover:bg-purple-50 transition">
+              <ScanBarcode size={28} />
+              <span className="text-sm font-medium">バーコード</span>
+              <span className="text-xs text-gray-400">JANコードから取得</span>
+            </button>
+            <button onClick={() => setMode('template')}
+              className="flex flex-col items-center gap-2 border-2 border-dashed border-amber-200 rounded-xl py-5 text-amber-600 hover:bg-amber-50 transition">
+              <BookMarked size={28} />
+              <span className="text-sm font-medium">テンプレート</span>
+              <span className="text-xs text-gray-400">よく使う食品から追加</span>
             </button>
           </div>
         ) : mode === 'text' ? (
@@ -426,6 +656,22 @@ export default function Meal() {
               </button>
             )}
           </div>
+        ) : mode === 'template' ? (
+          <TemplateMode
+            templates={templateFoods}
+            editingTemplate={editingTemplate}
+            newTemplate={newTemplate}
+            onAdd={handleTemplateAdd}
+            onEdit={setEditingTemplate}
+            onDelete={handleTemplateDelete}
+            onSave={handleTemplateSave}
+            onNewTemplate={() => {
+              setNewTemplate(true)
+              setEditingTemplate({ id: nanoid(), name: '', grams: 100, calories: 0, protein: 0, fat: 0, carbs: 0 })
+            }}
+            onCsvImport={handleCsvImport}
+            onClose={reset}
+          />
         ) : mode === 'barcode' ? (
           // バーコードスキャンモード
           <div className="space-y-3">
