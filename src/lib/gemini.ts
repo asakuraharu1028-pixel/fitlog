@@ -75,6 +75,86 @@ async function callGemini(apiKey: string, parts: object[]): Promise<AiFoodResult
   return JSON.parse(match[0]) as AiFoodResult[]
 }
 
+export interface RecipeNutrition {
+  calories: number
+  protein: number
+  fat: number
+  carbs: number
+  parsedIngredients: { name: string; amount: string }[]
+}
+
+const INGREDIENT_PROMPT = `あなたは栄養士アシスタントです。レシピの材料リストから全材料の栄養素を推定し、合計値を返してください。
+必ず以下のJSON形式のみで返答してください（説明文不要）:
+{"totalCalories":合計kcal整数,"totalProtein":合計タンパク質g,"totalFat":合計脂質g,"totalCarbs":合計炭水化物g,"items":[{"name":"食材名","amount":"量の表記","calories":kcal整数,"protein":タンパク質g,"fat":脂質g,"carbs":炭水化物g}]}
+- 各栄養素は日本食品標準成分表を参考に実際の量に合わせた絶対量で推定する
+- 「大さじ1」「1個」などの単位も適切にグラム換算して計算する`
+
+export async function analyzeRecipeIngredients(
+  ingredientsText: string,
+  servings: number
+): Promise<RecipeNutrition> {
+  const apiKey = getApiKey()
+  if (!apiKey) throw new Error('APIキーが設定されていません')
+
+  const prompt = `${INGREDIENT_PROMPT}\n\n以下の材料リスト（${servings}人前）の栄養素合計を推定してください:\n${ingredientsText}`
+
+  let text: string
+
+  if (isOpenRouterKey(apiKey)) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'google/gemma-4-31b-it:free',
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error((err as { error?: { message?: string } }).error?.message ?? `APIエラー ${res.status}`)
+    }
+    const data = await res.json()
+    text = data.choices?.[0]?.message?.content ?? ''
+  } else {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' },
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error((err as { error?: { message?: string } }).error?.message ?? `APIエラー ${res.status}`)
+    }
+    const data = await res.json()
+    text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  }
+
+  const match = text.match(/\{[\s\S]*\}/)
+  if (!match) throw new Error('AIからの応答を解析できませんでした')
+
+  const parsed = JSON.parse(match[0]) as {
+    totalCalories: number
+    totalProtein: number
+    totalFat: number
+    totalCarbs: number
+    items: { name: string; amount: string }[]
+  }
+
+  const perServing = (v: number) => Math.round((v / servings) * 10) / 10
+
+  return {
+    calories:          Math.round(parsed.totalCalories / servings),
+    protein:           perServing(parsed.totalProtein),
+    fat:               perServing(parsed.totalFat),
+    carbs:             perServing(parsed.totalCarbs),
+    parsedIngredients: (parsed.items ?? []).map(i => ({ name: i.name, amount: i.amount })),
+  }
+}
+
 export async function analyzeFoodText(text: string): Promise<AiFoodResult[]> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('APIキーが設定されていません')

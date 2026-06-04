@@ -75,20 +75,26 @@ export interface StepLog {
 
 export type RecipeCategory = 'main' | 'side' | 'soup' | 'staple' | 'breakfast' | 'snack'
 
+export interface RecipeIngredient {
+  name: string    // 食材名
+  amount: string  // 量（例: "200g", "大さじ1", "1個"）
+}
+
 export interface Recipe {
   id: string
   name: string
   category: RecipeCategory
-  tags: string[]        // 例: ['高タンパク', '低脂質']
-  servings: number      // 何人前
-  calories: number      // 1人前
+  tags: string[]              // 例: ['高タンパク', '低脂質']
+  servings: number            // 何人前
+  calories: number            // 1人前
   protein: number
   fat: number
   carbs: number
+  ingredients?: RecipeIngredient[]  // 材料リスト
   note?: string
   sourceUrl?: string
-  createdAt: string     // ISO8601
-  updatedAt: string     // ISO8601
+  createdAt: string           // ISO8601
+  updatedAt: string           // ISO8601
 }
 
 export interface RecipeDB {

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link } from 'lucide-react'
 import { useRecipeStore } from '../lib/recipedb'
-import type { Recipe, RecipeCategory } from '../types'
+import { analyzeRecipeIngredients, getApiKey } from '../lib/gemini'
+import { fetchRecipeFromUrl } from '../lib/recipefetch'
+import type { Recipe, RecipeCategory, RecipeIngredient } from '../types'
 
 const CATEGORY_LABELS: Record<RecipeCategory, string> = {
   main:      '主菜',
@@ -26,32 +28,39 @@ const CATEGORIES = Object.keys(CATEGORY_LABELS) as RecipeCategory[]
 
 // ── フォームの初期値 ──────────────────────────────────────────
 const EMPTY_FORM = {
-  name: '',
-  category: 'main' as RecipeCategory,
-  tags: '',
-  servings: 1,
-  calories: 0,
-  protein: 0,
-  fat: 0,
-  carbs: 0,
-  note: '',
-  sourceUrl: '',
+  name:             '',
+  category:         'main' as RecipeCategory,
+  tags:             '',
+  servings:         1,
+  calories:         0,
+  protein:          0,
+  fat:              0,
+  carbs:            0,
+  ingredientsText:  '',   // 材料入力テキスト（改行区切り）
+  note:             '',
+  sourceUrl:        '',
 }
 
 type FormState = typeof EMPTY_FORM
 
+function ingredientsToText(items?: RecipeIngredient[]): string {
+  if (!items || items.length === 0) return ''
+  return items.map(i => `${i.name} ${i.amount}`).join('\n')
+}
+
 function toFormState(r: Recipe): FormState {
   return {
-    name:      r.name,
-    category:  r.category,
-    tags:      r.tags.join('、'),
-    servings:  r.servings,
-    calories:  r.calories,
-    protein:   r.protein,
-    fat:       r.fat,
-    carbs:     r.carbs,
-    note:      r.note ?? '',
-    sourceUrl: r.sourceUrl ?? '',
+    name:            r.name,
+    category:        r.category,
+    tags:            r.tags.join('、'),
+    servings:        r.servings,
+    calories:        r.calories,
+    protein:         r.protein,
+    fat:             r.fat,
+    carbs:           r.carbs,
+    ingredientsText: ingredientsToText(r.ingredients),
+    note:            r.note ?? '',
+    sourceUrl:       r.sourceUrl ?? '',
   }
 }
 
@@ -68,10 +77,59 @@ function RecipeFormModal({
   isSaving: boolean
 }) {
   const [f, setF] = useState<FormState>(initial)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [aiItems, setAiItems] = useState<{ name: string; amount: string }[]>([])
+  const [urlLoading, setUrlLoading] = useState(false)
+  const [urlError, setUrlError] = useState<string | null>(null)
+
   const set = (k: keyof FormState, v: string | number) =>
     setF(prev => ({ ...prev, [k]: v }))
 
+  const hasApiKey = !!getApiKey()
   const valid = f.name.trim() !== '' && f.calories >= 0
+
+  const handleFetchUrl = async () => {
+    if (!f.sourceUrl.trim()) return
+    setUrlLoading(true)
+    setUrlError(null)
+    try {
+      const fetched = await fetchRecipeFromUrl(f.sourceUrl.trim())
+      setF(prev => ({
+        ...prev,
+        name:            prev.name || fetched.name,
+        servings:        fetched.servings,
+        ingredientsText: fetched.ingredientsText,
+        note:            prev.note || fetched.note,
+      }))
+    } catch (e) {
+      setUrlError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setUrlLoading(false)
+    }
+  }
+
+  const handleCalcNutrition = async () => {
+    if (!f.ingredientsText.trim()) return
+    setAiLoading(true)
+    setAiError(null)
+    setAiItems([])
+    try {
+      const result = await analyzeRecipeIngredients(f.ingredientsText, f.servings || 1)
+      setF(prev => ({
+        ...prev,
+        calories: result.calories,
+        protein:  result.protein,
+        fat:      result.fat,
+        carbs:    result.carbs,
+      }))
+      setAiItems(result.parsedIngredients)
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0">
@@ -79,6 +137,41 @@ function RecipeFormModal({
         <h2 className="text-base font-bold text-gray-800">
           {initial.name ? 'レシピを編集' : 'レシピを登録'}
         </h2>
+
+        {/* URL → 情報取得（最初に置いて料理名を自動入力させる）*/}
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <Link size={14} className="text-blue-500" />
+            <label className="text-xs font-semibold text-blue-700">レシピURL（任意）</label>
+          </div>
+          <div className="flex gap-2">
+            <input
+              className="flex-1 min-w-0 border border-blue-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-400 bg-white"
+              placeholder="https://..."
+              value={f.sourceUrl}
+              onChange={e => set('sourceUrl', e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={handleFetchUrl}
+              disabled={urlLoading || !f.sourceUrl.trim()}
+              className="shrink-0 flex items-center gap-1 bg-blue-500 text-white rounded-xl px-3 py-2 text-xs font-bold disabled:opacity-40 hover:bg-blue-600 transition"
+            >
+              {urlLoading ? (
+                <span className="animate-pulse">取得中...</span>
+              ) : (
+                <>
+                  <Link size={12} />
+                  取得
+                </>
+              )}
+            </button>
+          </div>
+          {urlError && <p className="text-xs text-red-500">{urlError}</p>}
+          <p className="text-[10px] text-blue-500">
+            URLを入力して「取得」を押すと料理名・材料を自動入力します
+          </p>
+        </div>
 
         {/* 料理名 */}
         <div>
@@ -121,30 +214,75 @@ function RecipeFormModal({
             value={f.servings}
             onChange={e => set('servings', Number(e.target.value))}
           />
-          <span className="ml-2 text-xs text-gray-400">人前（以下は1人前の値）</span>
+          <span className="ml-2 text-xs text-gray-400">人前（栄養値は1人前で保存）</span>
         </div>
 
-        {/* 栄養 */}
-        <div className="grid grid-cols-2 gap-3">
-          {([
-            ['calories', 'カロリー (kcal)', '300'],
-            ['protein',  'タンパク質 (g)',  '20'],
-            ['fat',      '脂質 (g)',        '10'],
-            ['carbs',    '炭水化物 (g)',    '30'],
-          ] as [keyof FormState, string, string][]).map(([key, label, ph]) => (
-            <div key={key}>
-              <label className="text-xs text-gray-500 font-medium">{label}</label>
-              <input
-                type="number"
-                min={0}
-                step={key === 'calories' ? 1 : 0.1}
-                placeholder={ph}
-                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-green-400"
-                value={f[key] as number}
-                onChange={e => set(key, Number(e.target.value))}
-              />
+        {/* ── 材料入力セクション ── */}
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <ChefHat size={14} className="text-amber-500" />
+            <label className="text-xs font-semibold text-amber-700">材料リスト（任意）</label>
+          </div>
+          <textarea
+            rows={5}
+            className="w-full border border-amber-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400 resize-none bg-white"
+            placeholder={'例:\n鶏むね肉 200g\nオリーブオイル 大さじ1\nにんにく 1片\n塩 少々\nこしょう 少々'}
+            value={f.ingredientsText}
+            onChange={e => set('ingredientsText', e.target.value)}
+          />
+          {hasApiKey ? (
+            <button
+              type="button"
+              onClick={handleCalcNutrition}
+              disabled={aiLoading || !f.ingredientsText.trim()}
+              className="w-full flex items-center justify-center gap-2 bg-amber-500 text-white rounded-xl py-2 text-xs font-bold disabled:opacity-40 hover:bg-amber-600 transition"
+            >
+              <Sparkles size={13} className={aiLoading ? 'animate-pulse' : ''} />
+              {aiLoading ? 'AI計算中...' : 'AIでカロリー・PFCを計算'}
+            </button>
+          ) : (
+            <p className="text-xs text-amber-600 text-center">設定でAPIキーを登録するとAI計算が使えます</p>
+          )}
+          {aiError && <p className="text-xs text-red-500">{aiError}</p>}
+
+          {/* AI計算結果の内訳 */}
+          {aiItems.length > 0 && (
+            <div className="bg-white rounded-xl p-2 border border-amber-100 space-y-1">
+              <p className="text-[10px] font-semibold text-amber-600">AI認識結果（{f.servings}人前の合計 ÷ {f.servings} = 1人前）</p>
+              {aiItems.map((item, i) => (
+                <div key={i} className="flex justify-between text-[10px] text-gray-500">
+                  <span>{item.name}</span>
+                  <span className="text-gray-400">{item.amount}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+        </div>
+
+        {/* 栄養（手動入力 or AI計算後の値） */}
+        <div>
+          <label className="text-xs text-gray-500 font-medium">栄養素（1人前）</label>
+          <div className="grid grid-cols-2 gap-3 mt-1">
+            {([
+              ['calories', 'カロリー (kcal)', '300'],
+              ['protein',  'タンパク質 (g)',  '20'],
+              ['fat',      '脂質 (g)',        '10'],
+              ['carbs',    '炭水化物 (g)',    '30'],
+            ] as [keyof FormState, string, string][]).map(([key, label, ph]) => (
+              <div key={key}>
+                <label className="text-[10px] text-gray-400">{label}</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={key === 'calories' ? 1 : 0.1}
+                  placeholder={ph}
+                  className="mt-0.5 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-green-400"
+                  value={f[key] as number}
+                  onChange={e => set(key, Number(e.target.value))}
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* タグ */}
@@ -155,17 +293,6 @@ function RecipeFormModal({
             placeholder="例: 高タンパク、低脂質"
             value={f.tags}
             onChange={e => set('tags', e.target.value)}
-          />
-        </div>
-
-        {/* URL */}
-        <div>
-          <label className="text-xs text-gray-500 font-medium">レシピURL（任意）</label>
-          <input
-            className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-green-400"
-            placeholder="https://..."
-            value={f.sourceUrl}
-            onChange={e => set('sourceUrl', e.target.value)}
           />
         </div>
 
@@ -248,6 +375,21 @@ function RecipeCard({
             <span className="ml-auto text-gray-400">{recipe.servings}人前</span>
           </div>
 
+          {/* 材料 */}
+          {recipe.ingredients && recipe.ingredients.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 mb-1">材料（{recipe.servings}人前）</p>
+              <ul className="space-y-0.5">
+                {recipe.ingredients.map((ing, i) => (
+                  <li key={i} className="flex justify-between text-xs text-gray-500">
+                    <span>{ing.name}</span>
+                    <span className="text-gray-400">{ing.amount}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* メモ */}
           {recipe.note && (
             <p className="text-xs text-gray-500">{recipe.note}</p>
@@ -309,17 +451,32 @@ export default function RecipeDBPage() {
   )
 
   function formStateToRecipe(f: FormState): Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'> {
+    // 材料テキストを行ごとに分割して RecipeIngredient[] に変換
+    const ingredients: RecipeIngredient[] = f.ingredientsText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        // 最後の空白区切りトークンを量、それ以前を名前とみなす
+        const parts = line.split(/\s+/)
+        if (parts.length === 1) return { name: parts[0], amount: '' }
+        const amount = parts[parts.length - 1]
+        const name   = parts.slice(0, -1).join(' ')
+        return { name, amount }
+      })
+
     return {
-      name:      f.name.trim(),
-      category:  f.category,
-      tags:      f.tags.split(/[、,，]/).map(t => t.trim()).filter(Boolean),
-      servings:  f.servings,
-      calories:  f.calories,
-      protein:   f.protein,
-      fat:       f.fat,
-      carbs:     f.carbs,
-      note:      f.note.trim() || undefined,
-      sourceUrl: f.sourceUrl.trim() || undefined,
+      name:        f.name.trim(),
+      category:    f.category,
+      tags:        f.tags.split(/[、,，]/).map(t => t.trim()).filter(Boolean),
+      servings:    f.servings,
+      calories:    f.calories,
+      protein:     f.protein,
+      fat:         f.fat,
+      carbs:       f.carbs,
+      ingredients: ingredients.length > 0 ? ingredients : undefined,
+      note:        f.note.trim() || undefined,
+      sourceUrl:   f.sourceUrl.trim() || undefined,
     }
   }
 
