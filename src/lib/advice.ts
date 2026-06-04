@@ -66,24 +66,84 @@ function todayCalorieSummary(data: AppData, goalCalories: number) {
   return { intake, burned, remaining: goalCalories - intake + burned }
 }
 
+const MEAL_TYPE_LABEL: Record<string, string> = {
+  breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食',
+}
+const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack']
+
 export async function getMealAdvice(meal: MealLog, data: AppData): Promise<string> {
   const apiKey = getApiKey()
   if (!apiKey) return ''
 
   const goal = data.settings.goalCalories ?? 2000
   const { intake, burned, remaining } = todayCalorieSummary(data, goal)
-  const totalProtein = data.mealLogs
-    .filter(m => m.date === meal.date)
-    .flatMap(m => m.entries)
-    .reduce((s, e) => s + e.protein, 0)
+  const todayLogs = data.mealLogs.filter(m => m.date === meal.date)
+  const registeredTypes = todayLogs.map(m => m.mealType)
+  const totalProtein = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.protein, 0)
+
   const mealNames = meal.entries.map(e => `${e.foodName}(${e.calories}kcal)`).join('、')
-  const mealType = { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }[meal.mealType]
+  const mealType = MEAL_TYPE_LABEL[meal.mealType] ?? meal.mealType
+
+  // 登録済み食事の一覧
+  const registeredSummary = todayLogs
+    .map(m => `${MEAL_TYPE_LABEL[m.mealType] ?? m.mealType}: ${m.entries.map(e => e.foodName).join('・')}（${m.entries.reduce((s, e) => s + e.calories, 0)}kcal）`)
+    .join('\n')
+
+  // まだ記録されていない食事
+  const unregistered = MEAL_ORDER
+    .filter(t => t !== 'snack' && !registeredTypes.includes(t))
+    .map(t => MEAL_TYPE_LABEL[t])
+
+  const remainingMealsLine = unregistered.length > 0
+    ? `まだ記録されていない食事：${unregistered.join('・')}`
+    : '今日の食事はすべて記録済みです。'
 
   const prompt = `
 ${mealType}に「${mealNames}」を記録しました。
+今日の登録済み食事：
+${registeredSummary}
+${remainingMealsLine}
 今日の状況：摂取${intake}kcal / 目標${goal}kcal / 消費${burned}kcal / 残り${remaining}kcal
 今日のタンパク質合計：${totalProtein.toFixed(1)}g
 この食事内容と今日の栄養バランスを踏まえ、次の食事や生活習慣についてアドバイスをしてください。`
+
+  return callAI(prompt, data)
+}
+
+export async function getMealSuggestion(data: AppData): Promise<string> {
+  const apiKey = getApiKey()
+  if (!apiKey) return ''
+
+  const today = localDateStr()
+  const goal = data.settings.goalCalories ?? 2000
+  const { intake, burned, remaining } = todayCalorieSummary(data, goal)
+  const todayLogs = data.mealLogs.filter(m => m.date === today)
+  const registeredTypes = todayLogs.map(m => m.mealType)
+
+  const unregistered = MEAL_ORDER
+    .filter(t => t !== 'snack' && !registeredTypes.includes(t))
+    .map(t => MEAL_TYPE_LABEL[t])
+
+  if (unregistered.length === 0) return ''
+
+  const totalProtein = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.protein, 0)
+  const totalFat     = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.fat, 0)
+  const totalCarbs   = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.carbs, 0)
+
+  const registeredSummary = todayLogs.length > 0
+    ? todayLogs.map(m => `${MEAL_TYPE_LABEL[m.mealType] ?? m.mealType}: ${m.entries.map(e => e.foodName).join('・')}（${m.entries.reduce((s, e) => s + e.calories, 0)}kcal）`).join('\n')
+    : 'なし'
+
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight
+  const weightLine = weightKg ? `体重：${weightKg}kg` : ''
+
+  const prompt = `
+今日の食事記録：
+${registeredSummary}
+残りの未記録食事：${unregistered.join('・')}
+今日の状況：摂取済み${intake}kcal / 目標${goal}kcal / 消費${burned}kcal / 残り摂取可能${remaining}kcal
+摂取済みPFC：P${totalProtein.toFixed(1)}g / F${totalFat.toFixed(1)}g / C${totalCarbs.toFixed(1)}g${weightLine ? `\n${weightLine}` : ''}
+残りの${unregistered.join('・')}について、カロリーと栄養バランスを考慮した具体的な献立を提案してください。各食事の食品名と目安量を簡潔に箇条書きで示してください。`
 
   return callAI(prompt, data)
 }

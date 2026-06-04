@@ -6,7 +6,7 @@ import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { analyzeFoodText, analyzeFoodImage, analyzeFoodLabel, getApiKey, type AiFoodResult } from '../lib/gemini'
 import { lookupBarcode, BarcodeNotFoundError, submitToOpenFoodFacts, toPer100g } from '../lib/barcode'
-import { getMealAdvice } from '../lib/advice'
+import { getMealAdvice, getMealSuggestion } from '../lib/advice'
 import type { MealLog, FoodEntry, TemplateFoodItem } from '../types'
 import { nanoid } from 'nanoid'
 import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange, BookMarked, Upload, Search } from 'lucide-react'
@@ -328,6 +328,9 @@ export default function Meal() {
   const [saving, setSaving] = useState(false)
   const [advice, setAdvice] = useState<string | null>(null)
   const [adviceLoading, setAdviceLoading] = useState(false)
+  const [lastSavedLog, setLastSavedLog] = useState<MealLog | null>(null)
+  const [suggestion, setSuggestion] = useState<string | null>(null)
+  const [suggestionLoading, setSuggestionLoading] = useState(false)
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null)
   const [editingTemplate, setEditingTemplate] = useState<TemplateFoodItem | null>(null)
   const [newTemplate, setNewTemplate] = useState(false)
@@ -556,17 +559,11 @@ export default function Meal() {
       setLabelBase64(null)
       setLabelPreviewUrl(null)
 
-      if (hasApiKey) {
-        setAdviceLoading(true)
+      const savedLog = updatedLogs.find(m => m.date === today && m.mealType === mealType)
+      if (savedLog) {
+        setLastSavedLog(savedLog)
         setAdvice(null)
-        const savedLog = updatedLogs.find(m => m.date === today && m.mealType === mealType)
-        if (savedLog) {
-          getMealAdvice(savedLog, useAppStore.getState().data)
-            .then(a => { if (a) setAdvice(a) })
-            .finally(() => setAdviceLoading(false))
-        } else {
-          setAdviceLoading(false)
-        }
+        setSuggestion(null)
       }
     } finally {
       setSaving(false)
@@ -590,22 +587,99 @@ export default function Meal() {
         <span className="text-green-400 text-xs">›</span>
       </button>
 
-      {/* AIアドバイス */}
-      {(adviceLoading || advice) && (
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4 flex gap-3">
-          <Sparkles size={18} className="text-green-500 mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <p className="text-xs font-semibold text-green-700 mb-1">AI アドバイス</p>
+      {/* AIアドバイス・献立提案（食事保存後に表示） */}
+      {hasApiKey && lastSavedLog && (
+        <div className="space-y-3">
+          {/* アドバイス */}
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Sparkles size={14} className="text-green-500" />
+                <p className="text-xs font-semibold text-green-700">AI アドバイス</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {advice && (
+                  <button onClick={() => setAdvice(null)} className="text-gray-300 hover:text-gray-400">
+                    <X size={13} />
+                  </button>
+                )}
+                <button
+                  onClick={async () => {
+                    setAdviceLoading(true)
+                    setAdvice(null)
+                    try {
+                      const a = await getMealAdvice(lastSavedLog, useAppStore.getState().data)
+                      if (a) setAdvice(a)
+                    } finally {
+                      setAdviceLoading(false)
+                    }
+                  }}
+                  disabled={adviceLoading}
+                  className="text-xs text-green-600 hover:text-green-800 disabled:opacity-40 border border-green-300 rounded-lg px-2 py-0.5 transition"
+                >
+                  {adviceLoading ? '生成中...' : '取得'}
+                </button>
+              </div>
+            </div>
             {adviceLoading
               ? <p className="text-sm text-gray-400 animate-pulse">アドバイスを生成中...</p>
-              : <p className="text-sm text-gray-700">{advice}</p>
+              : advice
+                ? <p className="text-sm text-gray-700 whitespace-pre-line">{advice}</p>
+                : <p className="text-xs text-gray-400">「取得」を押すとこの食事へのアドバイスが表示されます</p>
             }
           </div>
-          {advice && (
-            <button onClick={() => setAdvice(null)} className="text-gray-300 hover:text-gray-400 shrink-0">
-              <X size={14} />
-            </button>
-          )}
+
+          {/* 残りの献立提案 */}
+          {(() => {
+            const MEAL_ORDER = ['breakfast', 'lunch', 'dinner']
+            const registeredTypes = new Set(
+              useAppStore.getState().data.mealLogs.filter(m => m.date === today).map(m => m.mealType)
+            )
+            const unregistered = MEAL_ORDER.filter(t => !registeredTypes.has(t))
+            if (unregistered.length === 0) return null
+            const LABELS: Record<string, string> = { breakfast: '朝食', lunch: '昼食', dinner: '夕食' }
+            return (
+              <div className="bg-gradient-to-r from-blue-50 to-sky-50 border border-blue-200 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles size={14} className="text-blue-500" />
+                    <p className="text-xs font-semibold text-blue-700">
+                      残りの献立提案（{unregistered.map(t => LABELS[t]).join('・')}）
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {suggestion && (
+                      <button onClick={() => setSuggestion(null)} className="text-gray-300 hover:text-gray-400">
+                        <X size={13} />
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        setSuggestionLoading(true)
+                        setSuggestion(null)
+                        try {
+                          const s = await getMealSuggestion(useAppStore.getState().data)
+                          if (s) setSuggestion(s)
+                        } finally {
+                          setSuggestionLoading(false)
+                        }
+                      }}
+                      disabled={suggestionLoading}
+                      className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40 border border-blue-300 rounded-lg px-2 py-0.5 transition"
+                    >
+                      {suggestionLoading ? '生成中...' : '取得'}
+                    </button>
+                  </div>
+                </div>
+                {suggestionLoading
+                  ? <p className="text-sm text-gray-400 animate-pulse">献立を提案中...</p>
+                  : suggestion
+                    ? <p className="text-sm text-gray-700 whitespace-pre-line">{suggestion}</p>
+                    : <p className="text-xs text-gray-400">「取得」を押すと残りの食事の献立を提案します</p>
+                }
+              </div>
+            )
+          })()}
         </div>
       )}
 

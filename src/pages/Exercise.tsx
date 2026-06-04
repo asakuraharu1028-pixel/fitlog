@@ -40,6 +40,8 @@ export default function Exercise() {
   const [strengthSaved, setStrengthSaved] = useState(false)
   const [advice, setAdvice] = useState<string | null>(null)
   const [adviceLoading, setAdviceLoading] = useState(false)
+  const [lastSavedLog, setLastSavedLog] = useState<CardioLog | StrengthLog | null>(null)
+  const [lastSavedType, setLastSavedType] = useState<'cardio' | 'strength' | null>(null)
   const hasApiKey = !!getApiKey()
 
   // 展開
@@ -77,12 +79,10 @@ export default function Exercise() {
       setCardioSaved(true)
       setDurationMin('30')
       setTimeout(() => setCardioSaved(false), 2000)
-
       if (hasApiKey) {
-        setAdvice(null); setAdviceLoading(true)
-        getCardioAdvice(log, useAppStore.getState().data)
-          .then(a => { if (a) setAdvice(a) })
-          .finally(() => setAdviceLoading(false))
+        setLastSavedLog(log)
+        setLastSavedType('cardio')
+        setAdvice(null)
       }
     } finally {
       setCardioSaving(false)
@@ -105,12 +105,10 @@ export default function Exercise() {
       setStrengthSaved(true)
       setSets([{ weight: 0, reps: 10 }])
       setTimeout(() => setStrengthSaved(false), 2000)
-
       if (hasApiKey) {
-        setAdvice(null); setAdviceLoading(true)
-        getStrengthAdvice(log, useAppStore.getState().data)
-          .then(a => { if (a) setAdvice(a) })
-          .finally(() => setAdviceLoading(false))
+        setLastSavedLog(log)
+        setLastSavedType('strength')
+        setAdvice(null)
       }
     } finally {
       setStrengthSaving(false)
@@ -141,22 +139,47 @@ export default function Exercise() {
   return (
     <div className="p-4 space-y-4">
 
-      {/* AIアドバイス */}
-      {(adviceLoading || advice) && (
-        <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-4 flex gap-3">
-          <Sparkles size={18} className="text-orange-500 mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <p className="text-xs font-semibold text-orange-700 mb-1">AI アドバイス</p>
-            {adviceLoading
-              ? <p className="text-sm text-gray-400 animate-pulse">アドバイスを生成中...</p>
-              : <p className="text-sm text-gray-700">{advice}</p>
-            }
+      {/* AIアドバイス（運動保存後に表示） */}
+      {hasApiKey && lastSavedLog && (
+        <div className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Sparkles size={14} className="text-orange-500" />
+              <p className="text-xs font-semibold text-orange-700">AI アドバイス</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {advice && (
+                <button onClick={() => setAdvice(null)} className="text-gray-300 hover:text-gray-400">
+                  <X size={13} />
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  setAdviceLoading(true)
+                  setAdvice(null)
+                  try {
+                    const currentData = useAppStore.getState().data
+                    const a = lastSavedType === 'cardio'
+                      ? await getCardioAdvice(lastSavedLog as CardioLog, currentData)
+                      : await getStrengthAdvice(lastSavedLog as StrengthLog, currentData)
+                    if (a) setAdvice(a)
+                  } finally {
+                    setAdviceLoading(false)
+                  }
+                }}
+                disabled={adviceLoading}
+                className="text-xs text-orange-600 hover:text-orange-800 disabled:opacity-40 border border-orange-300 rounded-lg px-2 py-0.5 transition"
+              >
+                {adviceLoading ? '生成中...' : '取得'}
+              </button>
+            </div>
           </div>
-          {advice && (
-            <button onClick={() => setAdvice(null)} className="text-gray-300 hover:text-gray-400 shrink-0">
-              <X size={14} />
-            </button>
-          )}
+          {adviceLoading
+            ? <p className="text-sm text-gray-400 animate-pulse">アドバイスを生成中...</p>
+            : advice
+              ? <p className="text-sm text-gray-700 whitespace-pre-line">{advice}</p>
+              : <p className="text-xs text-gray-400">「取得」を押すとこの運動へのアドバイスが表示されます</p>
+          }
         </div>
       )}
 
