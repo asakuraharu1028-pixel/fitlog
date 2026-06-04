@@ -49,7 +49,7 @@ function TemplateFoodForm({ item, onSave, onCancel }: {
         ] as const).map(({ k, label }) => (
           <div key={k} className="flex items-center gap-1">
             <span className="text-xs text-gray-400">{label}:</span>
-            <input type="number" value={(form as Record<string, number>)[k]}
+            <input type="number" value={(form as unknown as Record<string, number>)[k]}
               onChange={e => set(k, Number(e.target.value))}
               className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
             />
@@ -389,6 +389,7 @@ export default function Meal() {
     const entry: AiFoodResult = {
       name: t.name, grams: t.grams, calories: t.calories,
       protein: t.protein, fat: t.fat, carbs: t.carbs, na: t.sodium ?? 0,
+      fiber: 0, vitA: 0, vitC: 0, vitD: 0, ca: 0, fe: 0,
     }
     setResults(prev => [...(prev ?? []), entry])
     setMode('idle')
