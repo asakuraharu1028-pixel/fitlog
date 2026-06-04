@@ -583,16 +583,25 @@ export default function Settings() {
                 logs.push('睡眠を HC から読み込み中...')
                 setHcLog([...logs])
                 const sleeps = await hcReadSleep(past30, today)
-                logs.push(`✓ 睡眠: ${sleeps.length}件`)
-                const { data: latestData } = useAppStore.getState()
-                const existingSleepDates = new Set((latestData.sleepLogs ?? []).map((s: { date: string }) => s.date))
-                const newSleeps = sleeps
-                  .filter((s: { date: string }) => !existingSleepDates.has(s.date))
-                  .map((s: { date: string; startTime: string; endTime: string; durationMin: number }) => ({ id: nanoid(), ...s }))
-                if (newSleeps.length > 0) {
-                  await saveData({ sleepLogs: [...(latestData.sleepLogs ?? []), ...newSleeps] })
-                  logs.push(`✓ 睡眠 ${newSleeps.length}件を FitLog に追加`)
+                logs.push(`✓ 睡眠: ${sleeps.length}件取得`)
+                if (sleeps.length === 0) {
+                  logs.push('⚠ HC に睡眠データがないか、SleepSessionRecord が記録されていない可能性があります')
                 }
+                const { data: latestData, saveData: sleepSave } = useAppStore.getState()
+                // HC データで日付ごとに上書き（upsert）。HC 側を正とする
+                const hcSleepByDate = new Map(
+                  sleeps.map((s: { date: string; startTime: string; endTime: string; durationMin: number }) => [s.date, s])
+                )
+                const existingOtherSleeps = (latestData.sleepLogs ?? []).filter(
+                  (s: { date: string }) => !hcSleepByDate.has(s.date)
+                )
+                const hcSleepRecords = Array.from(hcSleepByDate.values()).map(
+                  (s: { date: string; startTime: string; endTime: string; durationMin: number }) => ({ id: nanoid(), ...s })
+                )
+                const mergedSleepLogs = [...existingOtherSleeps, ...hcSleepRecords]
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                await sleepSave({ sleepLogs: mergedSleepLogs })
+                logs.push(`✓ 睡眠 ${hcSleepRecords.length}件を FitLog に反映（既存を HC データで更新）`)
 
                 logs.push('🎉 同期完了！')
               } catch (e) {

@@ -197,11 +197,13 @@ class HealthConnectPlugin : Plugin() {
                 val response = client.readRecords(
                     ReadRecordsRequest(SleepSessionRecord::class, TimeRangeFilter.between(start, end))
                 )
+                android.util.Log.d("FitLog-HC", "readSleep: ${response.records.size} records, range=$start ~ $end")
                 val arr = JSArray()
                 for (r in response.records) {
                     val durationMin = Duration.between(r.startTime, r.endTime).toMinutes()
                     val obj = JSObject()
-                    obj.put("date", r.startTime.atZone(ZoneId.systemDefault()).toLocalDate().toString())
+                    // 起床日（endTime）を日付として使用（23時就寝→翌朝7時起床なら翌日付け）
+                    obj.put("date", r.endTime.atZone(ZoneId.systemDefault()).toLocalDate().toString())
                     obj.put("startTime", r.startTime.toString())
                     obj.put("endTime", r.endTime.toString())
                     obj.put("durationMin", durationMin)

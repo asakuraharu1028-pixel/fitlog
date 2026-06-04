@@ -9,7 +9,7 @@ import { lookupBarcode, BarcodeNotFoundError, submitToOpenFoodFacts, toPer100g }
 import { getMealAdvice } from '../lib/advice'
 import type { MealLog, FoodEntry, TemplateFoodItem } from '../types'
 import { nanoid } from 'nanoid'
-import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange, BookMarked, Upload } from 'lucide-react'
+import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange, BookMarked, Upload, Search } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
@@ -109,9 +109,13 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
   const isWeb = Capacitor.getPlatform() === 'web'
   const [csvError, setCsvError] = useState<string | null>(null)
   const [shopFilter, setShopFilter] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
 
   const shops = ['all', ...Array.from(new Set(templates.map(t => t.shop ?? '').filter(Boolean)))]
-  const filtered = shopFilter === 'all' ? templates : templates.filter(t => (t.shop ?? '') === shopFilter)
+  const byShop = shopFilter === 'all' ? templates : templates.filter(t => (t.shop ?? '') === shopFilter)
+  const filtered = searchQuery.trim()
+    ? byShop.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()) || (t.shop ?? '').toLowerCase().includes(searchQuery.toLowerCase()))
+    : byShop
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -162,6 +166,23 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
         </p>
       )}
 
+      {templates.length > 0 && (
+        <div className="relative">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="食品名・店舗名で検索..."
+            className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      )}
+
       {shops.length > 2 && (
         <div className="flex gap-1.5 flex-wrap">
           {shops.map(s => (
@@ -171,6 +192,12 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
             </button>
           ))}
         </div>
+      )}
+
+      {filtered.length === 0 && templates.length > 0 && (
+        <p className="text-xs text-gray-400 text-center py-2">
+          該当する食品が見つかりません
+        </p>
       )}
 
       {filtered.map(t => (
