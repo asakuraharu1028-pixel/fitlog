@@ -16,18 +16,24 @@ const MEAL_LABELS: Record<MealType, string> = {
   breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食',
 }
 
-function NutrientBar({ label, value, unit, color, max }: {
-  label: string; value: number; unit: string; color: string; max: number
+function NutrientBar({ label, value, unit, color, low, high }: {
+  label: string; value: number; unit: string; color: string; low: number; high: number
 }) {
-  const pct = Math.min((value / max) * 100, 100)
+  const pct = Math.min((value / high) * 100, 100)
+  const over  = value > high
+  const under = value < low
+  const valueColor = over ? 'text-red-500' : under ? 'text-gray-500' : 'text-green-600'
   return (
     <div>
       <div className="flex justify-between text-xs mb-0.5">
         <span className="text-gray-500">{label}</span>
-        <span className="font-medium text-gray-700">{value}{unit}</span>
+        <span className={`font-medium ${valueColor}`}>
+          {value}{unit}
+          <span className="text-gray-400 font-normal ml-1">/ {low}〜{high}{unit}</span>
+        </span>
       </div>
       <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full ${over ? 'bg-red-400' : color}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   )
@@ -113,6 +119,15 @@ export default function Meal() {
   totals.carbs   = Math.round(totals.carbs * 10) / 10
 
   const goalCal = data.settings.goalCalories ?? 2000
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight ?? 60
+
+  // PFC 目標レンジ（理想〜想定）
+  const goalProteinLow  = Math.round(weightKg * 1.6)
+  const goalProteinHigh = Math.round(weightKg * 2.0)
+  const goalFatLow      = Math.round(goalCal * 0.20 / 9)
+  const goalFatHigh     = Math.round(goalCal * 0.30 / 9)
+  const goalCarbsLow    = Math.round(goalCal * 0.50 / 4)
+  const goalCarbsHigh   = Math.round(goalCal * 0.60 / 4)
 
   // 画像選択（ネイティブカメラ）
   const handleImageCapture = async () => {
@@ -341,9 +356,9 @@ export default function Meal() {
           </div>
         </div>
         <div className="space-y-2">
-          <NutrientBar label="タンパク質" value={totals.protein} unit="g" color="bg-blue-400"   max={Math.round(goalCal * 0.25 / 4)} />
-          <NutrientBar label="脂質"       value={totals.fat}     unit="g" color="bg-yellow-400" max={Math.round(goalCal * 0.25 / 9)} />
-          <NutrientBar label="炭水化物"   value={totals.carbs}   unit="g" color="bg-orange-400" max={Math.round(goalCal * 0.55 / 4)} />
+          <NutrientBar label="タンパク質" value={totals.protein} unit="g" color="bg-blue-400"   low={goalProteinLow} high={goalProteinHigh} />
+          <NutrientBar label="脂質"       value={totals.fat}     unit="g" color="bg-yellow-400" low={goalFatLow}     high={goalFatHigh} />
+          <NutrientBar label="炭水化物"   value={totals.carbs}   unit="g" color="bg-orange-400" low={goalCarbsLow}   high={goalCarbsHigh} />
         </div>
       </div>
 
