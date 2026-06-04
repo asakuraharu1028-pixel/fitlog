@@ -64,6 +64,14 @@ export default function Home() {
   const goal      = data.settings.goalCalories ?? 2000
   const remaining = goal - totalCaloriesIn + totalCaloriesOut
 
+  // PFC 目標レンジ（理想〜想定）
+  const goalProteinLow  = Math.round(weightKg * 1.6)
+  const goalProteinHigh = Math.round(weightKg * 2.0)
+  const goalFatLow      = Math.round(goal * 0.20 / 9)
+  const goalFatHigh     = Math.round(goal * 0.30 / 9)
+  const goalCarbsLow    = Math.round(goal * 0.50 / 4)
+  const goalCarbsHigh   = Math.round(goal * 0.60 / 4)
+
   const hasApiKey = !!getApiKey()
 
   // アドバイス
@@ -263,11 +271,26 @@ export default function Home() {
             {/* 1日合計PFC */}
             <div className="mt-3 pt-3 border-t border-gray-100">
               <p className="text-xs text-gray-400 mb-1.5">本日合計</p>
-              <div className="flex gap-4 text-sm">
-                <span>P <b className="text-blue-500">{totalProtein.toFixed(1)}g</b></span>
-                <span>F <b className="text-yellow-500">{totalFat.toFixed(1)}g</b></span>
-                <span>C <b className="text-orange-500">{totalCarbs.toFixed(1)}g</b></span>
-                <span>塩分 <b className="text-red-400">{totalSaltG.toFixed(1)}g</b></span>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                <PfcRow
+                  label="P" labelColor="text-blue-500"
+                  value={totalProtein}
+                  low={goalProteinLow} high={goalProteinHigh}
+                />
+                <PfcRow
+                  label="F" labelColor="text-yellow-500"
+                  value={totalFat}
+                  low={goalFatLow} high={goalFatHigh}
+                />
+                <PfcRow
+                  label="C" labelColor="text-orange-500"
+                  value={totalCarbs}
+                  low={goalCarbsLow} high={goalCarbsHigh}
+                />
+                <span className="text-sm">
+                  塩分 <b className="text-red-400">{totalSaltG.toFixed(1)}g</b>
+                  <span className="text-xs text-gray-400 ml-1">/ 目安 6g以下</span>
+                </span>
               </div>
             </div>
           </>
@@ -402,5 +425,26 @@ function StatText({ label, value }: { label: string; value: string }) {
       <p className="text-lg font-bold text-gray-800">{value}</p>
       <p className="text-xs text-gray-400">{label}</p>
     </div>
+  )
+}
+
+function PfcRow({
+  label, labelColor, value, low, high,
+}: {
+  label: string
+  labelColor: string
+  value: number
+  low: number
+  high: number
+}) {
+  const over  = value > high
+  const under = value < low
+  const valueColor = over ? 'text-red-500' : under ? 'text-gray-500' : 'text-green-600'
+  return (
+    <span className="flex items-baseline gap-1 text-sm">
+      <span className={`font-semibold ${labelColor}`}>{label}</span>
+      <b className={valueColor}>{value.toFixed(1)}g</b>
+      <span className="text-xs text-gray-400">/ {low}〜{high}g</span>
+    </span>
   )
 }
