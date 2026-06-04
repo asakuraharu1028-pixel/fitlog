@@ -155,6 +155,7 @@ export interface TemplateFoodItem {
   fat: number
   carbs: number
   sodium?: number
+  shop?: string
 }
 
 export interface AppData {

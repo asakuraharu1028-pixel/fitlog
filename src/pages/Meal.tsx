@@ -70,25 +70,26 @@ function TemplateFoodForm({ item, onSave, onCancel }: {
   )
 }
 
-function parseTemplateCsv(text: string): TemplateFoodItem[] {
+function parseTemplateCsv(text: string, shop?: string): TemplateFoodItem[] {
   const lines = text.split(/\r?\n/).filter(l => l.trim())
   if (lines.length < 2) return []
   // ヘッダー行をスキップ（1行目が数値でなければヘッダーと判断）
   const firstCols = lines[0].split(',')
   const startIdx = isNaN(Number(firstCols[1])) ? 1 : 0
   return lines.slice(startIdx).flatMap(line => {
-    const cols = line.split(',').map(c => c.trim())
+    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''))
     const [name, grams, calories, protein, fat, carbs, sodium] = cols
     if (!name || isNaN(Number(calories))) return []
     return [{
       id: nanoid(),
       name,
-      grams: Number(grams) || 100,
+      grams: Number(grams) || 0,
       calories: Number(calories) || 0,
       protein: Number(protein) || 0,
       fat: Number(fat) || 0,
       carbs: Number(carbs) || 0,
       sodium: sodium ? Number(sodium) : undefined,
+      ...(shop ? { shop } : {}),
     }]
   })
 }
@@ -107,14 +108,19 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
 }) {
   const isWeb = Capacitor.getPlatform() === 'web'
   const [csvError, setCsvError] = useState<string | null>(null)
+  const [shopFilter, setShopFilter] = useState<string>('all')
+
+  const shops = ['all', ...Array.from(new Set(templates.map(t => t.shop ?? '').filter(Boolean)))]
+  const filtered = shopFilter === 'all' ? templates : templates.filter(t => (t.shop ?? '') === shopFilter)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    const shop = file.name.replace(/\.csv$/i, '')
     const reader = new FileReader()
     reader.onload = ev => {
       const text = ev.target?.result as string
-      const items = parseTemplateCsv(text)
+      const items = parseTemplateCsv(text, shop)
       if (items.length === 0) {
         setCsvError('有効なデータが見つかりませんでした。フォーマットを確認してください。')
       } else {
@@ -156,7 +162,18 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
         </p>
       )}
 
-      {templates.map(t => (
+      {shops.length > 2 && (
+        <div className="flex gap-1.5 flex-wrap">
+          {shops.map(s => (
+            <button key={s} onClick={() => setShopFilter(s)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition ${shopFilter === s ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-amber-50'}`}>
+              {s === 'all' ? 'すべて' : s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {filtered.map(t => (
         <div key={t.id}>
           {editingTemplate?.id === t.id && !newTemplate ? (
             <TemplateFoodForm
@@ -172,7 +189,8 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
               >
                 <p className="text-sm font-medium text-gray-700">{t.name}</p>
                 <p className="text-xs text-gray-400">
-                  {t.grams}g｜{t.calories}kcal P:{t.protein}g F:{t.fat}g C:{t.carbs}g
+                  {t.shop && <span className="text-amber-500 mr-1">[{t.shop}]</span>}
+                  {t.grams > 0 ? `${t.grams}g｜` : ''}{t.calories}kcal P:{t.protein}g F:{t.fat}g C:{t.carbs}g
                 </p>
               </button>
               <button onClick={() => onEdit(t)} className="text-gray-300 hover:text-amber-400 shrink-0">
