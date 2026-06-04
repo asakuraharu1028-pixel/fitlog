@@ -39,9 +39,11 @@ function buildPrompt(goalCalories: number): string {
 - レシピURLは https://oishi-kenko.com/recipes?q=料理名 の形式で記載（例: https://oishi-kenko.com/recipes?q=鶏照り焼き）
 - 7日間で食材・料理が偏らないよう多様な献立にする
 - 栄養バランス（P:F:C = 15-20% : 20-25% : 55-65%）を意識する
+- 食塩相当量は1日6.5g未満を目安にする（汁物・漬物・加工食品の塩分に注意）
 
 必ず以下のJSON形式のみで返答してください（コードブロック・説明文不要）:
-{"days":[{"dayLabel":"1日目（月）","totalCalories":${goalCalories},"breakfast":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"searchUrl":"URL or null"}],"lunch":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"searchUrl":"URL or null"}],"dinner":{"main":{"name":"主菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"searchUrl":"URL or null"},"staple":{"name":"主食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"searchUrl":null},"sides":[{"name":"副菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"searchUrl":"URL or null"}],"soup":{"name":"汁物名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"searchUrl":"URL or null"}},"snack":[{"name":"間食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"searchUrl":null,"note":"補足 or null"}]},...7日分]}
+{"days":[{"dayLabel":"1日目（月）","totalCalories":${goalCalories},"breakfast":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"lunch":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"dinner":{"main":{"name":"主菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"},"staple":{"name":"主食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null},"sides":[{"name":"副菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"soup":{"name":"汁物名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}},"snack":[{"name":"間食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"note":"補足 or null"}]},...7日分]}
+sodiumは食塩相当量（g）で記載すること。
 dayLabelは${DAY_LABELS.map((l, i) => `${i + 1}日目は"${l}"`).join('、')}とする。`
 }
 

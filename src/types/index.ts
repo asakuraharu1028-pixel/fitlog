@@ -118,6 +118,7 @@ export interface MealPlanDish {
   protein: number
   fat: number
   carbs: number
+  sodium?: number | null  // 食塩相当量 g
   searchUrl?: string | null
   note?: string | null
 }

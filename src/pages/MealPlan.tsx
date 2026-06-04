@@ -18,8 +18,8 @@ function calcDayTotal(day: DayMealPlan): number {
 
 function calcMacros(dishes: MealPlanDish[]) {
   return dishes.reduce(
-    (acc, d) => ({ p: acc.p + d.protein, f: acc.f + d.fat, c: acc.c + d.carbs }),
-    { p: 0, f: 0, c: 0 }
+    (acc, d) => ({ p: acc.p + d.protein, f: acc.f + d.fat, c: acc.c + d.carbs, s: acc.s + (d.sodium ?? 0) }),
+    { p: 0, f: 0, c: 0, s: 0 }
   )
 }
 
@@ -31,6 +31,7 @@ function DishRow({ dish }: { dish: MealPlanDish }) {
         {dish.note && <p className="text-xs text-gray-400 mt-0.5">{dish.note}</p>}
         <p className="text-xs text-gray-400">
           P:{Math.round(dish.protein * 10) / 10}g F:{Math.round(dish.fat * 10) / 10}g C:{Math.round(dish.carbs * 10) / 10}g
+          {dish.sodium != null && <> 塩:{Math.round(dish.sodium * 10) / 10}g</>}
         </p>
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -114,7 +115,7 @@ function DayCard({ day, index }: { day: DayMealPlan; index: number }) {
         <div className="flex items-center gap-3">
           <span className="text-sm font-bold text-gray-700">{day.dayLabel}</span>
           <span className="text-xs text-gray-400">
-            P:{Math.round(macros.p)}g F:{Math.round(macros.f)}g C:{Math.round(macros.c)}g
+            P:{Math.round(macros.p)}g F:{Math.round(macros.f)}g C:{Math.round(macros.c)}g 塩:{Math.round(macros.s * 10) / 10}g
           </span>
         </div>
         <div className="flex items-center gap-2">
