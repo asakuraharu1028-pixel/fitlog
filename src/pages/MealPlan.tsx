@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles, BookOpen } from 'lucide-react'
 import { useAppStore } from '../lib/store'
 import { getApiKey } from '../lib/gemini'
 import { generateWeeklyMealPlan, loadSavedMealPlan } from '../lib/mealplan'
@@ -174,6 +174,13 @@ export default function MealPlan() {
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-lg font-bold text-gray-800">週間献立プラン</h1>
+        <button
+          onClick={() => navigate('/recipedb')}
+          className="ml-auto flex items-center gap-1 text-xs text-green-600 border border-green-200 rounded-xl px-3 py-1.5 hover:bg-green-50 transition"
+        >
+          <BookOpen size={13} />
+          レシピDB
+        </button>
       </div>
 
       {/* 目標カロリー表示 */}

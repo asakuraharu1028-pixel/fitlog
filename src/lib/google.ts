@@ -87,6 +87,54 @@ async function findDataFile(): Promise<string | null> {
   return data.files?.[0]?.id ?? null
 }
 
+// ── 汎用ファイル操作 ─────────────────────────────────────────
+async function findFile(name: string): Promise<string | null> {
+  const res = await driveRequest(
+    `/files?spaces=appDataFolder&q=name='${name}'&fields=files(id)`
+  )
+  const data = await res.json()
+  return data.files?.[0]?.id ?? null
+}
+
+export async function loadFileFromDrive<T>(name: string): Promise<T | null> {
+  const fileId = await findFile(name)
+  if (!fileId) return null
+  const res = await driveRequest(`/files/${fileId}?alt=media`)
+  return res.json()
+}
+
+export async function saveFileToDrive<T>(name: string, data: T): Promise<void> {
+  const body = JSON.stringify(data)
+  const fileId = await findFile(name)
+  if (fileId) {
+    if (!accessToken) throw new Error('Not authenticated')
+    const res = await fetch(
+      `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+        body,
+      }
+    )
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`Drive update error: ${res.status} - ${text}`)
+    }
+  } else {
+    const meta = JSON.stringify({ name, parents: ['appDataFolder'] })
+    const form = new FormData()
+    form.append('metadata', new Blob([meta], { type: 'application/json' }))
+    form.append('file', new Blob([body], { type: 'application/json' }))
+    if (!accessToken) throw new Error('Not authenticated')
+    const res = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+      { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: form }
+    )
+    if (!res.ok) throw new Error(`Drive upload error: ${res.status}`)
+  }
+}
+
+// ── fitlog-data.json（既存） ──────────────────────────────────
 export async function loadFromDrive<T>(): Promise<T | null> {
   const fileId = await findDataFile()
   if (!fileId) return null

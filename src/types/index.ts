@@ -73,6 +73,29 @@ export interface StepLog {
   steps: number
 }
 
+export type RecipeCategory = 'main' | 'side' | 'soup' | 'staple' | 'breakfast' | 'snack'
+
+export interface Recipe {
+  id: string
+  name: string
+  category: RecipeCategory
+  tags: string[]        // 例: ['高タンパク', '低脂質']
+  servings: number      // 何人前
+  calories: number      // 1人前
+  protein: number
+  fat: number
+  carbs: number
+  note?: string
+  sourceUrl?: string
+  createdAt: string     // ISO8601
+  updatedAt: string     // ISO8601
+}
+
+export interface RecipeDB {
+  version: 1
+  recipes: Recipe[]
+}
+
 export interface AdviceLog {
   id: string
   date: string       // YYYY-MM-DD
