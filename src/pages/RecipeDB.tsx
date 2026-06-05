@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed } from 'lucide-react'
 import { useRecipeStore } from '../lib/recipedb'
 import { analyzeRecipeIngredients, getApiKey } from '../lib/gemini'
@@ -462,6 +462,8 @@ function RecipeCard({
 // ── メインページ ──────────────────────────────────────────────
 export default function RecipeDBPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const fromMealType = (location.state as { fromMealType?: string } | null)?.fromMealType
   const { db, isLoading, isSaving, error, loadDB, addRecipe, updateRecipe, deleteRecipe } = useRecipeStore()
 
   const [filterCat, setFilterCat] = useState<RecipeCategory | 'all'>('all')
@@ -606,7 +608,7 @@ export default function RecipeDBPage() {
             recipe={r}
             onEdit={() => handleEdit(r)}
             onDelete={() => handleDelete(r.id)}
-            onAddMeal={() => navigate('/meal', { state: { pendingEntries: [recipeToEntry(r)] } })}
+            onAddMeal={() => navigate('/meal', { state: { pendingEntries: [recipeToEntry(r)], mealType: fromMealType } })}
           />
         ))}
       </div>
