@@ -80,14 +80,16 @@ export interface RecipeNutrition {
   protein: number
   fat: number
   carbs: number
+  sodium: number  // 食塩相当量 g（1人前）
   parsedIngredients: { name: string; amount: string }[]
 }
 
 const INGREDIENT_PROMPT = `あなたは栄養士アシスタントです。レシピの材料リストから全材料の栄養素を推定し、合計値を返してください。
 必ず以下のJSON形式のみで返答してください（説明文不要）:
-{"totalCalories":合計kcal整数,"totalProtein":合計タンパク質g,"totalFat":合計脂質g,"totalCarbs":合計炭水化物g,"items":[{"name":"食材名","amount":"量の表記","calories":kcal整数,"protein":タンパク質g,"fat":脂質g,"carbs":炭水化物g}]}
+{"totalCalories":合計kcal整数,"totalProtein":合計タンパク質g,"totalFat":合計脂質g,"totalCarbs":合計炭水化物g,"totalSodium":合計食塩相当量g,"items":[{"name":"食材名","amount":"量の表記","calories":kcal整数,"protein":タンパク質g,"fat":脂質g,"carbs":炭水化物g}]}
 - 各栄養素は日本食品標準成分表を参考に実際の量に合わせた絶対量で推定する
-- 「大さじ1」「1個」などの単位も適切にグラム換算して計算する`
+- 「大さじ1」「1個」などの単位も適切にグラム換算して計算する
+- totalSodiumはしょうゆ・味噌・塩・めんつゆなどの調味料も含めた食塩相当量の合計（g）を返す`
 
 export async function analyzeRecipeIngredients(
   ingredientsText: string,
@@ -141,6 +143,7 @@ export async function analyzeRecipeIngredients(
     totalProtein: number
     totalFat: number
     totalCarbs: number
+    totalSodium?: number
     items: { name: string; amount: string }[]
   }
 
@@ -151,6 +154,7 @@ export async function analyzeRecipeIngredients(
     protein:           perServing(parsed.totalProtein),
     fat:               perServing(parsed.totalFat),
     carbs:             perServing(parsed.totalCarbs),
+    sodium:            perServing(parsed.totalSodium ?? 0),
     parsedIngredients: (parsed.items ?? []).map(i => ({ name: i.name, amount: i.amount })),
   }
 }

@@ -139,6 +139,7 @@ function RecipeFormModal({
         protein:  result.protein,
         fat:      result.fat,
         carbs:    result.carbs,
+        sodium:   result.sodium,
       }))
       setAiItems(result.parsedIngredients)
     } catch (e) {
