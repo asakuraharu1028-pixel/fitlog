@@ -1,10 +1,25 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles, BookOpen } from 'lucide-react'
+import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles, BookOpen, Plus } from 'lucide-react'
 import { useAppStore } from '../lib/store'
 import { getApiKey } from '../lib/gemini'
 import { generateWeeklyMealPlan, loadSavedMealPlan } from '../lib/mealplan'
 import type { WeeklyMealPlan, DayMealPlan, MealPlanDish, DinnerPlan } from '../types'
+import type { AiFoodResult } from '../lib/gemini'
+
+function dishToEntry(d: MealPlanDish): AiFoodResult {
+  return {
+    name: d.name,
+    grams: 0,
+    calories: d.calories,
+    protein: d.protein,
+    fat: d.fat,
+    carbs: d.carbs,
+    fiber: 0, vitA: 0, vitC: 0, vitD: 0, ca: 0, fe: 0,
+    // 食塩相当量(g) → Na(mg)
+    na: d.sodium != null ? Math.round(d.sodium * 393) : 0,
+  }
+}
 
 function calcDayTotal(day: DayMealPlan): number {
   const bfCal = day.breakfast.reduce((s, d) => s + d.calories, 0)
@@ -47,7 +62,7 @@ function DishRow({ dish }: { dish: MealPlanDish }) {
   )
 }
 
-function DinnerSection({ dinner }: { dinner: DinnerPlan }) {
+function DinnerSection({ dinner, onAdd }: { dinner: DinnerPlan; onAdd?: () => void }) {
   const totalCal = dinner.main.calories + dinner.staple.calories +
     dinner.sides.reduce((s, d) => s + d.calories, 0) +
     (dinner.soup?.calories ?? 0)
@@ -57,6 +72,12 @@ function DinnerSection({ dinner }: { dinner: DinnerPlan }) {
       <div className="flex items-center gap-1 mb-1">
         <span className="text-xs font-semibold text-orange-500">夕食</span>
         <span className="text-xs text-gray-400 ml-auto">{totalCal}kcal</span>
+        {onAdd && (
+          <button onClick={onAdd}
+            className="ml-2 flex items-center gap-0.5 text-[10px] text-green-600 border border-green-200 rounded-lg px-1.5 py-0.5 hover:bg-green-50 transition">
+            <Plus size={10} />食事に登録
+          </button>
+        )}
       </div>
       <div className="pl-2 border-l-2 border-orange-100 space-y-0.5">
         <p className="text-[10px] text-orange-400 font-medium">主菜</p>
@@ -80,7 +101,9 @@ function DinnerSection({ dinner }: { dinner: DinnerPlan }) {
   )
 }
 
-function MealSection({ label, dishes, color }: { label: string; dishes: MealPlanDish[]; color: string }) {
+function MealSection({ label, dishes, color, onAdd }: {
+  label: string; dishes: MealPlanDish[]; color: string; onAdd?: () => void
+}) {
   if (!dishes || dishes.length === 0) return null
   const total = dishes.reduce((s, d) => s + d.calories, 0)
   return (
@@ -88,6 +111,12 @@ function MealSection({ label, dishes, color }: { label: string; dishes: MealPlan
       <div className="flex items-center gap-1 mb-1">
         <span className={`text-xs font-semibold ${color}`}>{label}</span>
         <span className="text-xs text-gray-400 ml-auto">{total}kcal</span>
+        {onAdd && (
+          <button onClick={onAdd}
+            className="ml-2 flex items-center gap-0.5 text-[10px] text-green-600 border border-green-200 rounded-lg px-1.5 py-0.5 hover:bg-green-50 transition">
+            <Plus size={10} />食事に登録
+          </button>
+        )}
       </div>
       {dishes.map((d, i) => <DishRow key={i} dish={d} />)}
     </div>
@@ -95,6 +124,7 @@ function MealSection({ label, dishes, color }: { label: string; dishes: MealPlan
 }
 
 function DayCard({ day, index }: { day: DayMealPlan; index: number }) {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(index === 0)
   const total = calcDayTotal(day)
   const allDishes = [
@@ -105,6 +135,14 @@ function DayCard({ day, index }: { day: DayMealPlan; index: number }) {
     ...(day.snack ?? []),
   ]
   const macros = calcMacros(allDishes)
+
+  const goMeal = (dishes: MealPlanDish[], mealType: string) =>
+    navigate('/meal', { state: { pendingEntries: dishes.map(dishToEntry), mealType } })
+
+  const dinnerDishes = [
+    day.dinner.main, day.dinner.staple, ...day.dinner.sides,
+    ...(day.dinner.soup ? [day.dinner.soup] : []),
+  ]
 
   return (
     <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -126,11 +164,15 @@ function DayCard({ day, index }: { day: DayMealPlan; index: number }) {
 
       {open && (
         <div className="border-t border-gray-100 px-4 py-3 space-y-4">
-          <MealSection label="朝食" dishes={day.breakfast} color="text-yellow-500" />
-          <MealSection label="昼食" dishes={day.lunch} color="text-blue-500" />
-          <DinnerSection dinner={day.dinner} />
+          <MealSection label="朝食" dishes={day.breakfast} color="text-yellow-500"
+            onAdd={day.breakfast.length > 0 ? () => goMeal(day.breakfast, 'breakfast') : undefined} />
+          <MealSection label="昼食" dishes={day.lunch} color="text-blue-500"
+            onAdd={day.lunch.length > 0 ? () => goMeal(day.lunch, 'lunch') : undefined} />
+          <DinnerSection dinner={day.dinner}
+            onAdd={() => goMeal(dinnerDishes, 'dinner')} />
           {day.snack && day.snack.length > 0 && (
-            <MealSection label="間食" dishes={day.snack} color="text-purple-500" />
+            <MealSection label="間食" dishes={day.snack} color="text-purple-500"
+              onAdd={() => goMeal(day.snack!, 'snack')} />
           )}
         </div>
       )}

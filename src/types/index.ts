@@ -157,6 +157,7 @@ export interface TemplateFoodItem {
   carbs: number
   sodium?: number
   shop?: string
+  jan?: string // JANコード（バーコード）
 }
 
 export interface AppData {

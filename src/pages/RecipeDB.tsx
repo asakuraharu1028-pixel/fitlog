@@ -1,10 +1,23 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed } from 'lucide-react'
 import { useRecipeStore } from '../lib/recipedb'
 import { analyzeRecipeIngredients, getApiKey } from '../lib/gemini'
 import { fetchRecipeFromUrl } from '../lib/recipefetch'
 import type { Recipe, RecipeCategory, RecipeIngredient } from '../types'
+import type { AiFoodResult } from '../lib/gemini'
+
+function recipeToEntry(r: Recipe): AiFoodResult {
+  return {
+    name: r.name,
+    grams: 0,
+    calories: r.calories,
+    protein: r.protein,
+    fat: r.fat,
+    carbs: r.carbs,
+    fiber: 0, vitA: 0, vitC: 0, vitD: 0, ca: 0, fe: 0, na: 0,
+  }
+}
 
 const CATEGORY_LABELS: Record<RecipeCategory, string> = {
   main:      '主菜',
@@ -335,10 +348,12 @@ function RecipeCard({
   recipe,
   onEdit,
   onDelete,
+  onAddMeal,
 }: {
   recipe: Recipe
   onEdit: () => void
   onDelete: () => void
+  onAddMeal: () => void
 }) {
   const [open, setOpen] = useState(false)
 
@@ -410,6 +425,12 @@ function RecipeCard({
 
           {/* 操作 */}
           <div className="flex gap-2 pt-1">
+            <button
+              onClick={onAddMeal}
+              className="flex items-center gap-1 text-xs text-green-600 border border-green-200 rounded-lg px-3 py-1.5 hover:bg-green-50 transition"
+            >
+              <UtensilsCrossed size={12} /> 食事に追加
+            </button>
             <button
               onClick={onEdit}
               className="flex items-center gap-1 text-xs text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition"
@@ -575,6 +596,7 @@ export default function RecipeDBPage() {
             recipe={r}
             onEdit={() => handleEdit(r)}
             onDelete={() => handleDelete(r.id)}
+            onAddMeal={() => navigate('/meal', { state: { pendingEntries: [recipeToEntry(r)] } })}
           />
         ))}
       </div>

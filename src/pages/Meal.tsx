@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { Capacitor } from '@capacitor/core'
 import { localDateStr } from '../lib/utils'
@@ -23,7 +23,7 @@ function TemplateFoodForm({ item, onSave, onCancel }: {
   onCancel: () => void
 }) {
   const [form, setForm] = useState(item)
-  const set = (k: keyof TemplateFoodItem, v: string | number) =>
+  const set = (k: keyof TemplateFoodItem, v: string | number | undefined) =>
     setForm(prev => ({ ...prev, [k]: v }))
   return (
     <div className="bg-amber-50 rounded-xl px-3 py-3 space-y-2">
@@ -32,6 +32,12 @@ function TemplateFoodForm({ item, onSave, onCancel }: {
         onChange={e => set('name', e.target.value)}
         placeholder="食品名（例：ザバスホエイプロテイン）"
         className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+      />
+      <input
+        value={form.jan ?? ''}
+        onChange={e => set('jan', e.target.value)}
+        placeholder="JANコード（任意）"
+        className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400 font-mono"
       />
       <div className="flex items-center gap-1.5">
         <input type="number" value={form.grams}
@@ -78,7 +84,7 @@ function parseTemplateCsv(text: string, shop?: string): TemplateFoodItem[] {
   const startIdx = isNaN(Number(firstCols[1])) ? 1 : 0
   return lines.slice(startIdx).flatMap(line => {
     const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''))
-    const [name, grams, calories, protein, fat, carbs, sodium] = cols
+    const [name, grams, calories, protein, fat, carbs, sodium, jan] = cols
     if (!name || isNaN(Number(calories))) return []
     return [{
       id: nanoid(),
@@ -89,6 +95,7 @@ function parseTemplateCsv(text: string, shop?: string): TemplateFoodItem[] {
       fat: Number(fat) || 0,
       carbs: Number(carbs) || 0,
       sodium: sodium ? Number(sodium) : undefined,
+      jan: jan || undefined,
       ...(shop ? { shop } : {}),
     }]
   })
@@ -155,7 +162,7 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
           </label>
           {csvError && <p className="text-xs text-red-500 mt-1 px-1">{csvError}</p>}
           <p className="text-xs text-gray-400 mt-1 px-1">
-            形式: 名前,グラム,kcal,P(g),F(g),C(g),Na(mg) — 1行目はヘッダー可
+            形式: 名前,グラム,kcal,P(g),F(g),C(g),Na(mg),JAN — 1行目はヘッダー可
           </p>
         </div>
       )}
@@ -293,6 +300,7 @@ function toFoodEntry(r: AiFoodResult): FoodEntry {
 export default function Meal() {
   const { data, saveData } = useAppStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const today = localDateStr()
 
   const [mealType, setMealType] = useState<MealType>(() => {
@@ -337,6 +345,18 @@ export default function Meal() {
 
   const hasApiKey = !!getApiKey()
   const templateFoods = data.templateFoods ?? []
+
+  // MealPlan / RecipeDB からの遷移でエントリを受け取る
+  useEffect(() => {
+    const state = location.state as { pendingEntries?: AiFoodResult[]; mealType?: MealType } | null
+    if (state?.pendingEntries && state.pendingEntries.length > 0) {
+      setResults(state.pendingEntries)
+      if (state.mealType) setMealType(state.mealType)
+      // state をクリアして戻ったときに再展開しない
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // 今日の食事ログ
   const todayLogs = data.mealLogs
@@ -474,6 +494,13 @@ export default function Meal() {
     setError(null)
     setAnalyzing(true)
     try {
+      // ① テンプレートDBをJANコードで検索
+      const byJan = templateFoods.find(t => t.jan === code)
+      if (byJan) {
+        handleTemplateAdd(byJan)
+        return
+      }
+      // ② OpenFoodFacts検索
       const result = await lookupBarcode(code)
       setResults([result])
     } catch (e) {
@@ -865,13 +892,22 @@ export default function Meal() {
               return hits.length > 0 ? (
                 <div className="space-y-1.5">
                   {hits.map(t => (
-                    <button key={t.id} onClick={() => { handleTemplateAdd(t); setPendingBarcode(null) }}
+                    <button key={t.id} onClick={async () => {
+                      // JANを紐付けて保存（次回からJAN検索でヒット）
+                      if (pendingBarcode && !t.jan) {
+                        const updated = templateFoods.map(x => x.id === t.id ? { ...x, jan: pendingBarcode } : x)
+                        await saveData({ templateFoods: updated })
+                      }
+                      handleTemplateAdd(t)
+                      setPendingBarcode(null)
+                    }}
                       className="w-full flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 text-left hover:bg-amber-50 transition">
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-700">{t.name}</p>
                         <p className="text-xs text-gray-400">
                           {t.shop && <span className="text-amber-500 mr-1">[{t.shop}]</span>}
                           {t.grams > 0 ? `${t.grams}g｜` : ''}{t.calories}kcal P:{t.protein}g F:{t.fat}g C:{t.carbs}g
+                          {t.jan && <span className="ml-1 font-mono text-gray-300">{t.jan}</span>}
                         </p>
                       </div>
                       <Plus size={16} className="text-amber-400 shrink-0" />
