@@ -100,6 +100,17 @@ export async function getMealAdvice(meal: MealLog, data: AppData): Promise<strin
     ? `まだ記録されていない食事：${unregistered.join('・')}`
     : '今日の食事はすべて記録済みです。'
 
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight
+  const proteinLow  = weightKg ? Math.round(weightKg * 1.6) : null
+  const proteinHigh = weightKg ? Math.round(weightKg * 2.0) : null
+  const fatLow      = Math.round(goal * 0.20 / 9)
+  const fatHigh     = Math.round(goal * 0.30 / 9)
+  const carbsLow    = Math.round(goal * 0.50 / 4)
+  const carbsHigh   = Math.round(goal * 0.60 / 4)
+  const pfcTargetLine = proteinLow != null
+    ? `PFC目標レンジ: タンパク質${proteinLow}〜${proteinHigh}g / 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
+    : `PFC目標レンジ: 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
+
   const prompt = `
 ${mealType}に「${mealNames}」を記録しました。
 今日の登録済み食事：
@@ -107,6 +118,7 @@ ${registeredSummary}
 ${remainingMealsLine}
 今日の状況：摂取${intake}kcal / 目標${goal}kcal / 消費${burned}kcal / 残り${remaining}kcal
 今日のタンパク質合計：${totalProtein.toFixed(1)}g
+${pfcTargetLine}
 この食事内容と今日の栄養バランスを踏まえ、次の食事や生活習慣についてアドバイスをしてください。`
 
   return callAI(prompt, data)
@@ -211,10 +223,21 @@ export async function getDailyAdvice(data: AppData): Promise<string> {
   const today = localDateStr()
   const s = dayStats(data, today)
   const goal = data.settings.goalCalories ?? 2000
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight
+  const proteinLow  = weightKg ? Math.round(weightKg * 1.6) : null
+  const proteinHigh = weightKg ? Math.round(weightKg * 2.0) : null
+  const fatLow      = Math.round(goal * 0.20 / 9)
+  const fatHigh     = Math.round(goal * 0.30 / 9)
+  const carbsLow    = Math.round(goal * 0.50 / 4)
+  const carbsHigh   = Math.round(goal * 0.60 / 4)
+  const pfcTargetLine = proteinLow != null
+    ? `PFC目標レンジ: タンパク質${proteinLow}〜${proteinHigh}g / 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
+    : `PFC目標レンジ: 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
 
   const prompt = `今日（${today}）の健康データを総括してください。
 摂取カロリー: ${s.calories}kcal（目標: ${goal}kcal）
-PFC: タンパク質${s.protein.toFixed(1)}g / 脂質${s.fat.toFixed(1)}g / 炭水化物${s.carbs.toFixed(1)}g
+PFC実績: タンパク質${s.protein.toFixed(1)}g / 脂質${s.fat.toFixed(1)}g / 炭水化物${s.carbs.toFixed(1)}g
+${pfcTargetLine}
 塩分相当量: ${(s.sodium * 2.54 / 1000).toFixed(1)}g（目安: 男性7.5g未満、女性6.5g未満）
 消費カロリー: ${s.burned}kcal
 睡眠: ${s.sleep > 0 ? `${Math.floor(s.sleep / 60)}時間${s.sleep % 60}分` : '未記録'}
@@ -245,9 +268,22 @@ export async function getWeeklyAdvice(data: AppData): Promise<string> {
   const avgSleep   = avg(stats.map(s => s.sleep).filter(s => s > 0))
   const exerciseDays = stats.filter(s => s.burned > 0).length
 
+  const goal = data.settings.goalCalories ?? 2000
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight
+  const proteinLow  = weightKg ? Math.round(weightKg * 1.6) : null
+  const proteinHigh = weightKg ? Math.round(weightKg * 2.0) : null
+  const fatLow      = Math.round(goal * 0.20 / 9)
+  const fatHigh     = Math.round(goal * 0.30 / 9)
+  const carbsLow    = Math.round(goal * 0.50 / 4)
+  const carbsHigh   = Math.round(goal * 0.60 / 4)
+  const pfcTargetLine = proteinLow != null
+    ? `PFC目標レンジ: タンパク質${proteinLow}〜${proteinHigh}g / 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
+    : `PFC目標レンジ: 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
+
   const prompt = `過去7日間の健康データを週次総括してください（記録: ${stats.length}日）。
-1日平均摂取カロリー: ${avgCal}kcal
-平均PFC: タンパク質${avgProtein}g / 脂質${avgFat}g / 炭水化物${avgCarbs}g
+1日平均摂取カロリー: ${avgCal}kcal（目標: ${goal}kcal）
+平均PFC実績: タンパク質${avgProtein}g / 脂質${avgFat}g / 炭水化物${avgCarbs}g
+${pfcTargetLine}
 平均塩分相当量: ${(avgSodium * 2.54 / 1000).toFixed(1)}g
 平均消費カロリー: ${avgBurned}kcal
 運動した日数: ${exerciseDays}/7日

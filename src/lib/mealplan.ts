@@ -50,7 +50,34 @@ function buildRecipeSection(recipes: Recipe[]): string {
   return '\n\n' + lines.join('\n')
 }
 
-function buildPrompt(goalCalories: number, recipes: Recipe[]): string {
+export interface BentoSettings {
+  days: number[]      // 0=月, 1=火, ..., 6=日
+  recipe: Recipe | null
+}
+
+function buildBentoSection(settings: BentoSettings): string {
+  if (settings.days.length === 0) return ''
+
+  const dayNames = ['月', '火', '水', '木', '金', '土', '日']
+  const targetDays = settings.days
+    .map(d => `${d + 1}日目（${dayNames[d]}）`)
+    .join('、')
+
+  const lines = ['', '【弁当指定】']
+  if (settings.recipe) {
+    const r = settings.recipe
+    const sodium = r.sodium != null ? ` 塩${r.sodium}g` : ''
+    lines.push(`- ${targetDays} の昼食は弁当「${r.name}」に固定する`)
+    lines.push(`  栄養値: ${r.calories}kcal P${r.protein}g F${r.fat}g C${r.carbs}g${sodium}（DB登録値をそのままJSONに使うこと）`)
+  } else {
+    lines.push(`- ${targetDays} の昼食は弁当とする（弁当らしい献立をAIが提案）`)
+  }
+  lines.push('- 弁当指定日は7日間すべて同じ弁当内容にする')
+  lines.push('- 弁当以外の曜日の昼食は通常通り提案する')
+  return lines.join('\n')
+}
+
+function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSettings): string {
   const breakfastCal = Math.round(goalCalories * 0.27)
   const lunchCal    = Math.round(goalCalories * 0.23)
   const dinnerCal   = Math.round(goalCalories * 0.35)
@@ -69,7 +96,7 @@ function buildPrompt(goalCalories: number, recipes: Recipe[]): string {
 - 食塩相当量は1日6.5g未満を目安にする（汁物・漬物・加工食品の塩分に注意）
 - 朝食は7日間で2～3パターンに絞り、同じ献立を繰り返してよい（毎日違う朝食にしない）
 - 夕食の主菜・副菜は週4～5種類に絞り、複数日で同じレシピを繰り返す
-- 買い物リストの食材総数が80品目以内に収まるよう食材の使い回しを最優先で意識する（同じ食材を複数料理に活用する）${buildRecipeSection(recipes)}
+- 買い物リストの食材総数が80品目以内に収まるよう食材の使い回しを最優先で意識する（同じ食材を複数料理に活用する）${buildRecipeSection(recipes)}${bento ? buildBentoSection(bento) : ''}
 
 必ず以下のJSON形式のみで返答してください（コードブロック・説明文不要）:
 {"days":[{"dayLabel":"1日目（月）","totalCalories":${goalCalories},"breakfast":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"lunch":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"dinner":{"main":{"name":"主菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"},"staple":{"name":"主食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null},"sides":[{"name":"副菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"soup":{"name":"汁物名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}},"snack":[{"name":"間食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"note":"補足 or null"}]},...7日分]}
@@ -126,11 +153,15 @@ async function callOpenRouter(apiKey: string, prompt: string): Promise<DayMealPl
   return parsed.days
 }
 
-export async function generateWeeklyMealPlan(goalCalories: number, recipes: Recipe[] = []): Promise<WeeklyMealPlan> {
+export async function generateWeeklyMealPlan(
+  goalCalories: number,
+  recipes: Recipe[] = [],
+  bento?: BentoSettings
+): Promise<WeeklyMealPlan> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('APIキーが設定されていません')
 
-  const prompt = buildPrompt(goalCalories, recipes)
+  const prompt = buildPrompt(goalCalories, recipes, bento)
   const days = isOpenRouterKey(apiKey)
     ? await callOpenRouter(apiKey, prompt)
     : await callGemini(apiKey, prompt)

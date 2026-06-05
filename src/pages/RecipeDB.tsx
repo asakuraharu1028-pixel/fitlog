@@ -28,6 +28,7 @@ const CATEGORY_LABELS: Record<RecipeCategory, string> = {
   staple:    '主食',
   breakfast: '朝食向け',
   snack:     '間食',
+  bento:     '弁当',
 }
 
 const CATEGORY_COLORS: Record<RecipeCategory, string> = {
@@ -37,6 +38,7 @@ const CATEGORY_COLORS: Record<RecipeCategory, string> = {
   staple:    'bg-yellow-100 text-yellow-700',
   breakfast: 'bg-pink-100 text-pink-700',
   snack:     'bg-purple-100 text-purple-700',
+  bento:     'bg-amber-100 text-amber-700',
 }
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as RecipeCategory[]

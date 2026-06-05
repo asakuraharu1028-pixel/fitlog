@@ -74,7 +74,7 @@ export interface StepLog {
   steps: number
 }
 
-export type RecipeCategory = 'main' | 'side' | 'soup' | 'staple' | 'breakfast' | 'snack'
+export type RecipeCategory = 'main' | 'side' | 'soup' | 'staple' | 'breakfast' | 'snack' | 'bento'
 
 export interface RecipeIngredient {
   name: string    // 食材名

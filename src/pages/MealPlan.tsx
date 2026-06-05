@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles, B
 import { useAppStore } from '../lib/store'
 import { getApiKey } from '../lib/gemini'
 import { generateWeeklyMealPlan, loadSavedMealPlan } from '../lib/mealplan'
+import type { BentoSettings } from '../lib/mealplan'
 import { useRecipeStore } from '../lib/recipedb'
 import type { WeeklyMealPlan, DayMealPlan, MealPlanDish, DinnerPlan } from '../types'
 import type { AiFoodResult } from '../lib/gemini'
@@ -194,6 +195,13 @@ export default function MealPlan() {
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // 弁当設定
+  const bentoDays = ['月', '火', '水', '木', '金', '土', '日']
+  const [bentoDayFlags, setBentoDayFlags] = useState<boolean[]>(Array(7).fill(false))
+  const [bentoRecipeId, setBentoRecipeId] = useState<string>('')
+  const bentoRecipes = recipeDB.recipes.filter(r => r.category === 'bento')
+  const selectedBentoRecipe = bentoRecipes.find(r => r.id === bentoRecipeId) ?? null
+
   const goalCalories = data.settings.goalCalories ?? 2000
 
   useEffect(() => {
@@ -206,7 +214,11 @@ export default function MealPlan() {
     setError(null)
     setGenerating(true)
     try {
-      const newPlan = await generateWeeklyMealPlan(goalCalories, recipeDB.recipes)
+      const selectedDays = bentoDayFlags.map((on, i) => on ? i : -1).filter(i => i >= 0)
+      const bento: BentoSettings | undefined = selectedDays.length > 0
+        ? { days: selectedDays, recipe: selectedBentoRecipe }
+        : undefined
+      const newPlan = await generateWeeklyMealPlan(goalCalories, recipeDB.recipes, bento)
       setPlan(newPlan)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'エラーが発生しました')
@@ -265,6 +277,53 @@ export default function MealPlan() {
           >
             設定画面へ
           </button>
+        </div>
+      )}
+
+      {/* 弁当設定 */}
+      {hasApiKey && (
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 space-y-3">
+          <p className="text-xs font-semibold text-amber-700">🍱 弁当を持っていく曜日</p>
+          <div className="flex gap-2 flex-wrap">
+            {bentoDays.map((label, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setBentoDayFlags(prev => prev.map((v, j) => j === i ? !v : v))}
+                className={`w-9 h-9 rounded-full text-xs font-bold border transition
+                  ${bentoDayFlags[i]
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : 'bg-white text-gray-500 border-gray-200'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {bentoDayFlags.some(Boolean) && (
+            <div>
+              <p className="text-xs text-amber-600 mb-1.5">使用する弁当レシピ</p>
+              {bentoRecipes.length === 0 ? (
+                <p className="text-xs text-gray-400">
+                  弁当レシピがDBに登録されていません。AIが自動提案します。
+                  <button onClick={() => navigate('/recipedb')} className="ml-1 text-amber-600 underline">登録する</button>
+                </p>
+              ) : (
+                <select
+                  className="w-full border border-amber-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:border-amber-400"
+                  value={bentoRecipeId}
+                  onChange={e => setBentoRecipeId(e.target.value)}
+                >
+                  <option value="">AIに任せる</option>
+                  {bentoRecipes.map(r => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}（{r.calories}kcal）
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
         </div>
       )}
 
