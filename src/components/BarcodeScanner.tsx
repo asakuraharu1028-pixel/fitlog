@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
-import { BrowserMultiFormatReader } from '@zxing/browser'
+import { MultiFormatReader, BinaryBitmap, HybridBinarizer, RGBLuminanceSource } from '@zxing/library'
 import { X, Camera as CameraIcon, Keyboard } from 'lucide-react'
 
 interface Props {
@@ -29,9 +29,11 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(img, 0, 0, w, h)
 
-        const reader = new BrowserMultiFormatReader()
         try {
-          const result = reader.decodeFromCanvas(canvas)
+          const imageData = ctx.getImageData(0, 0, w, h)
+          const luminanceSource = new RGBLuminanceSource(imageData.data, w, h)
+          const bitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource))
+          const result = new MultiFormatReader().decode(bitmap)
           resolve(result.getText())
         } catch {
           reject(new Error('NotFoundException'))
