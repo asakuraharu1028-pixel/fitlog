@@ -9,7 +9,7 @@ import { lookupBarcode, BarcodeNotFoundError, submitToOpenFoodFacts, toPer100g }
 import { getMealAdvice, getMealSuggestion } from '../lib/advice'
 import type { MealLog, FoodEntry, TemplateFoodItem } from '../types'
 import { nanoid } from 'nanoid'
-import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange, BookMarked, Upload, Search } from 'lucide-react'
+import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange, BookMarked, Upload, Search, BookOpen } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
@@ -802,6 +802,12 @@ export default function Meal() {
               <BookMarked size={28} />
               <span className="text-sm font-medium">テンプレート</span>
               <span className="text-xs text-gray-400">よく使う食品から追加</span>
+            </button>
+            <button onClick={() => navigate('/recipedb')}
+              className="flex flex-col items-center gap-2 border-2 border-dashed border-teal-200 rounded-xl py-5 text-teal-600 hover:bg-teal-50 transition">
+              <BookOpen size={28} />
+              <span className="text-sm font-medium">レシピDB</span>
+              <span className="text-xs text-gray-400">登録レシピから追加</span>
             </button>
           </div>
         ) : mode === 'text' ? (
