@@ -36,6 +36,7 @@ export interface MealLog {
   date: string
   mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack'
   entries: FoodEntry[]
+  skipped?: boolean // 食べなかった
 }
 
 export interface CardioLog {

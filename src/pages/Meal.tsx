@@ -312,7 +312,7 @@ export default function Meal() {
     setPreviewUrl(null)
     setImageBase64(null)
   }
-  const [mode, setMode] = useState<'idle' | 'text' | 'image' | 'barcode' | 'label' | 'template'>('idle')
+  const [mode, setMode] = useState<'idle' | 'text' | 'image' | 'barcode' | 'label' | 'template' | 'barcode-template-search'>('idle')
   const [pendingBarcode, setPendingBarcode] = useState<string | null>(null)
   const [labelBase64, setLabelBase64] = useState<string | null>(null)
   const [labelPreviewUrl, setLabelPreviewUrl] = useState<string | null>(null)
@@ -430,7 +430,7 @@ export default function Meal() {
     setMode('idle'); setResults(null); setError(null)
     setTextInput(''); setPreviewUrl(null); setImageBase64(null)
     setPendingBarcode(null); setLabelBase64(null); setLabelPreviewUrl(null)
-    setEditingTemplate(null); setNewTemplate(false)
+    setEditingTemplate(null); setNewTemplate(false); setTemplateSearchQuery('')
   }
 
   const handleTemplateAdd = (t: TemplateFoodItem) => {
@@ -467,6 +467,8 @@ export default function Meal() {
     await saveData({ templateFoods: [...updated, ...toAdd] })
   }
 
+  const [templateSearchQuery, setTemplateSearchQuery] = useState('')
+
   const handleBarcodeDetected = async (code: string) => {
     setMode('idle')
     setError(null)
@@ -477,7 +479,8 @@ export default function Meal() {
     } catch (e) {
       if (e instanceof BarcodeNotFoundError) {
         setPendingBarcode(e.barcode)
-        setMode('label')
+        setTemplateSearchQuery('')
+        setMode('barcode-template-search')
         setError(null)
       } else {
         setError(e instanceof Error ? e.message : 'バーコード取得に失敗しました')
@@ -726,6 +729,20 @@ export default function Meal() {
             </button>
           ))}
         </div>
+        {/* 食べなかったボタン（選択中の食事タイプがまだ未登録の場合のみ表示） */}
+        {!data.mealLogs.find(m => m.date === today && m.mealType === mealType) && mode === 'idle' && (
+          <button
+            onClick={async () => {
+              const newLog: import('../types').MealLog = {
+                id: nanoid(), date: today, mealType, entries: [], skipped: true,
+              }
+              await saveData({ mealLogs: [...data.mealLogs, newLog] })
+            }}
+            className="w-full mb-3 border border-gray-200 rounded-xl py-2 text-xs text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition"
+          >
+            {MEAL_LABELS[mealType]}は食べなかった
+          </button>
+        )}
 
         {!hasApiKey ? (
           <div className="text-center py-4 text-sm text-gray-400">
@@ -808,6 +825,70 @@ export default function Meal() {
                 onClose={reset}
               />
             )}
+          </div>
+        ) : mode === 'barcode-template-search' ? (
+          // バーコード未収録：テンプレートDB検索
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2 text-amber-600">
+                <PackageSearch size={16} />
+                <span className="text-sm font-medium">テンプレートから検索</span>
+              </div>
+              <button onClick={reset} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+            </div>
+            <p className="text-xs text-gray-500 bg-amber-50 rounded-xl px-3 py-2">
+              バーコードがDBに未登録です。テンプレートに登録済みの食品を検索して追加できます。
+            </p>
+            {pendingBarcode && (
+              <p className="text-xs text-gray-400">バーコード: <span className="font-mono">{pendingBarcode}</span></p>
+            )}
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                value={templateSearchQuery}
+                onChange={e => setTemplateSearchQuery(e.target.value)}
+                placeholder="食品名で検索..."
+                autoFocus
+                className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              {templateSearchQuery && (
+                <button onClick={() => setTemplateSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            {templateSearchQuery.trim() && (() => {
+              const q = templateSearchQuery.toLowerCase()
+              const hits = templateFoods.filter(t =>
+                t.name.toLowerCase().includes(q) || (t.shop ?? '').toLowerCase().includes(q)
+              )
+              return hits.length > 0 ? (
+                <div className="space-y-1.5">
+                  {hits.map(t => (
+                    <button key={t.id} onClick={() => { handleTemplateAdd(t); setPendingBarcode(null) }}
+                      className="w-full flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 text-left hover:bg-amber-50 transition">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-700">{t.name}</p>
+                        <p className="text-xs text-gray-400">
+                          {t.shop && <span className="text-amber-500 mr-1">[{t.shop}]</span>}
+                          {t.grams > 0 ? `${t.grams}g｜` : ''}{t.calories}kcal P:{t.protein}g F:{t.fat}g C:{t.carbs}g
+                        </p>
+                      </div>
+                      <Plus size={16} className="text-amber-400 shrink-0" />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-2">該当する食品が見つかりません</p>
+              )
+            })()}
+            <button
+              onClick={() => setMode('label')}
+              className="w-full border border-purple-200 bg-purple-50 rounded-xl py-3 text-purple-600 text-sm font-medium hover:bg-purple-100 transition flex items-center justify-center gap-2"
+            >
+              <Camera size={16} />
+              栄養成分ラベルを撮影して手入力
+            </button>
           </div>
         ) : mode === 'label' ? (
           // 未収録商品：ラベル撮影モード
@@ -961,6 +1042,24 @@ export default function Meal() {
             {todayLogs.map((log) => {
               const logCal = log.entries.reduce((s, e) => s + e.calories, 0)
               const isOpen = expandedMeal === log.id
+              if (log.skipped) {
+                return (
+                  <div key={log.id} className="flex items-center justify-between border border-gray-100 rounded-xl px-3 py-2.5 bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-400">{MEAL_LABELS[log.mealType as MealType]}</span>
+                      <span className="text-xs text-gray-300">食べなかった</span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await saveData({ mealLogs: data.mealLogs.filter(m => m.id !== log.id) })
+                      }}
+                      className="text-gray-300 hover:text-red-400 transition"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )
+              }
               return (
                 <div key={log.id} className="border border-gray-100 rounded-xl overflow-hidden">
                   <button className="w-full flex justify-between items-center px-3 py-2.5 hover:bg-gray-50"
