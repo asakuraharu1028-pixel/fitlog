@@ -1,5 +1,5 @@
 import { getApiKey } from './gemini'
-import type { WeeklyMealPlan, DayMealPlan } from '../types'
+import type { WeeklyMealPlan, DayMealPlan, Recipe, RecipeCategory } from '../types'
 import { nanoid } from 'nanoid'
 
 const MEALPLAN_STORAGE_KEY = 'fitlog-mealplan'
@@ -23,7 +23,33 @@ function isOpenRouterKey(key: string) {
 
 const DAY_LABELS = ['1日目（月）', '2日目（火）', '3日目（水）', '4日目（木）', '5日目（金）', '6日目（土）', '7日目（日）']
 
-function buildPrompt(goalCalories: number): string {
+const CATEGORY_JP: Record<RecipeCategory, string> = {
+  main: '主菜', side: '副菜', soup: '汁物', staple: '主食', breakfast: '朝食向け', snack: '間食',
+}
+
+function buildRecipeSection(recipes: Recipe[]): string {
+  if (recipes.length === 0) return ''
+
+  const byCategory: Partial<Record<RecipeCategory, Recipe[]>> = {}
+  for (const r of recipes) {
+    ;(byCategory[r.category] ??= []).push(r)
+  }
+
+  const lines: string[] = ['【登録済みレシピDB（できる限りこの中から選んでください）】']
+  for (const [cat, list] of Object.entries(byCategory) as [RecipeCategory, Recipe[]][]) {
+    lines.push(`■ ${CATEGORY_JP[cat]}`)
+    for (const r of list) {
+      const sodium = r.sodium != null ? ` 塩${r.sodium}g` : ''
+      lines.push(`  - ${r.name}：${r.calories}kcal P${r.protein}g F${r.fat}g C${r.carbs}g${sodium}`)
+    }
+  }
+  lines.push('')
+  lines.push('※ DBにないカテゴリや料理が必要な場合のみ、自由に補完してください。')
+  lines.push('※ 各レシピのPFC・塩分値はDB登録値をそのままJSONに使ってください（自分で計算しない）。')
+  return '\n\n' + lines.join('\n')
+}
+
+function buildPrompt(goalCalories: number, recipes: Recipe[]): string {
   const breakfastCal = Math.round(goalCalories * 0.27)
   const lunchCal    = Math.round(goalCalories * 0.23)
   const dinnerCal   = Math.round(goalCalories * 0.35)
@@ -36,10 +62,10 @@ function buildPrompt(goalCalories: number): string {
 - カロリー配分目安: 朝食 ${breakfastCal}kcal、昼食 ${lunchCal}kcal、夕食 ${dinnerCal}kcal、間食 ${snackCal}kcal
 - プロテインサプリメントは1日最大30gまで（間食に組み込み可）
 - 夕食の構成: 主菜・主食・副菜(1〜2種)・汁物（省略・変更も可）
-- レシピURLは https://oishi-kenko.com/recipes?q=料理名 の形式で記載（例: https://oishi-kenko.com/recipes?q=鶏照り焼き）
-- 7日間で食材・料理が偏らないよう多様な献立にする
+- レシピURLはDBに sourceUrl がある場合はそれを使用。ない場合は https://oishi-kenko.com/recipes?q=料理名 の形式で記載
+- 7日間で食材・料理が偏らないよう多様な献立にする（DBのレシピが複数ある場合は7日間で分散させる）
 - 栄養バランス（P:F:C = 15-20% : 20-25% : 55-65%）を意識する
-- 食塩相当量は1日6.5g未満を目安にする（汁物・漬物・加工食品の塩分に注意）
+- 食塩相当量は1日6.5g未満を目安にする（汁物・漬物・加工食品の塩分に注意）${buildRecipeSection(recipes)}
 
 必ず以下のJSON形式のみで返答してください（コードブロック・説明文不要）:
 {"days":[{"dayLabel":"1日目（月）","totalCalories":${goalCalories},"breakfast":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"lunch":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"dinner":{"main":{"name":"主菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"},"staple":{"name":"主食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null},"sides":[{"name":"副菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"soup":{"name":"汁物名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}},"snack":[{"name":"間食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"note":"補足 or null"}]},...7日分]}
@@ -96,11 +122,11 @@ async function callOpenRouter(apiKey: string, prompt: string): Promise<DayMealPl
   return parsed.days
 }
 
-export async function generateWeeklyMealPlan(goalCalories: number): Promise<WeeklyMealPlan> {
+export async function generateWeeklyMealPlan(goalCalories: number, recipes: Recipe[] = []): Promise<WeeklyMealPlan> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('APIキーが設定されていません')
 
-  const prompt = buildPrompt(goalCalories)
+  const prompt = buildPrompt(goalCalories, recipes)
   const days = isOpenRouterKey(apiKey)
     ? await callOpenRouter(apiKey, prompt)
     : await callGemini(apiKey, prompt)

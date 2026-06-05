@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles, B
 import { useAppStore } from '../lib/store'
 import { getApiKey } from '../lib/gemini'
 import { generateWeeklyMealPlan, loadSavedMealPlan } from '../lib/mealplan'
+import { useRecipeStore } from '../lib/recipedb'
 import type { WeeklyMealPlan, DayMealPlan, MealPlanDish, DinnerPlan } from '../types'
 import type { AiFoodResult } from '../lib/gemini'
 
@@ -183,7 +184,10 @@ function DayCard({ day, index }: { day: DayMealPlan; index: number }) {
 export default function MealPlan() {
   const navigate = useNavigate()
   const { data } = useAppStore()
+  const { db: recipeDB, loadDB } = useRecipeStore()
   const hasApiKey = !!getApiKey()
+
+  useEffect(() => { loadDB() }, [loadDB])
 
   const [plan, setPlan] = useState<WeeklyMealPlan | null>(() => loadSavedMealPlan())
   const [generating, setGenerating] = useState(false)
@@ -200,7 +204,7 @@ export default function MealPlan() {
     setError(null)
     setGenerating(true)
     try {
-      const newPlan = await generateWeeklyMealPlan(goalCalories)
+      const newPlan = await generateWeeklyMealPlan(goalCalories, recipeDB.recipes)
       setPlan(newPlan)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'エラーが発生しました')
