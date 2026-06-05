@@ -1,6 +1,7 @@
 import { getApiKey } from './gemini'
 import { localDateStr } from './utils'
 import { getCharacter } from './characters'
+import { useRecipeStore } from './recipedb'
 import type { MealLog, CardioLog, StrengthLog, AppData } from '../types'
 
 function isOpenRouterKey(key: string) {
@@ -140,16 +141,22 @@ export async function getMealSuggestion(data: AppData): Promise<string> {
   const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight
   const weightLine = weightKg ? `体重：${weightKg}kg` : ''
 
+  // レシピDBからレシピ一覧を取得
+  const recipes = useRecipeStore.getState().db.recipes
+  const recipeListLine = recipes.length > 0
+    ? `\n【登録済みレシピDB（優先して使うこと）】\n${recipes.map(r => `・${r.name}（${r.calories}kcal, P:${r.protein}g F:${r.fat}g C:${r.carbs}g${r.sodium != null ? ` 塩:${r.sodium}g` : ''}）`).join('\n')}`
+    : ''
+
   const prompt = `
 今日の食事記録：
 ${registeredSummary}
 残りの未記録食事：${unregistered.join('・')}
 今日の状況：摂取済み${intake}kcal / 目標${goal}kcal / 消費${burned}kcal / 残り摂取可能${remaining}kcal
 摂取済みPFC：P${totalProtein.toFixed(1)}g / F${totalFat.toFixed(1)}g / C${totalCarbs.toFixed(1)}g
-摂取済み塩分相当量：${totalSaltG.toFixed(1)}g（目標上限：男性7.5g・女性6.5g）${weightLine ? `\n${weightLine}` : ''}
+摂取済み塩分相当量：${totalSaltG.toFixed(1)}g（目標上限：男性7.5g・女性6.5g）${weightLine ? `\n${weightLine}` : ''}${recipeListLine}
 残りの${unregistered.join('・')}について、カロリーと栄養バランスを考慮した具体的な献立を提案してください。各食事の食品名と目安量を簡潔に箇条書きで示してください。`
 
-  const suggestionSystemPrompt = `あなたは栄養士です。ユーザーの食事記録とカロリー・PFC・塩分バランスを元に、残りの食事の具体的な献立を提案します。アドバイスや感想は不要です。食事ごとに食品名と目安量（g）を箇条書きで簡潔に示してください。塩分が多い場合は薄味の料理を優先してください。`
+  const suggestionSystemPrompt = `あなたは栄養士です。ユーザーの食事記録とカロリー・PFC・塩分バランスを元に、残りの食事の具体的な献立を提案します。アドバイスや感想は不要です。食事ごとに食品名と目安量（g）を箇条書きで簡潔に示してください。塩分が多い場合は薄味の料理を優先してください。登録済みレシピDBが提供されている場合は、そのレシピを優先的に提案に活用してください。`
   return callAI(prompt, data, suggestionSystemPrompt)
 }
 
