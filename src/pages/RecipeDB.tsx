@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed, Search, X } from 'lucide-react'
 import { useRecipeStore } from '../lib/recipedb'
 import { analyzeRecipeIngredients, getApiKey } from '../lib/gemini'
 import { fetchRecipeFromUrl } from '../lib/recipefetch'
@@ -467,6 +467,7 @@ export default function RecipeDBPage() {
   const { db, isLoading, isSaving, error, loadDB, addRecipe, updateRecipe, deleteRecipe } = useRecipeStore()
 
   const [filterCat, setFilterCat] = useState<RecipeCategory | 'all'>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState<Recipe | null>(null)
 
@@ -474,9 +475,18 @@ export default function RecipeDBPage() {
     loadDB()
   }, [loadDB])
 
-  const filtered = filterCat === 'all'
-    ? db.recipes
-    : db.recipes.filter(r => r.category === filterCat)
+  const q = searchQuery.trim().toLowerCase()
+
+  const filtered = db.recipes.filter(r => {
+    if (filterCat !== 'all' && r.category !== filterCat) return false
+    if (!q) return true
+    return (
+      r.name.toLowerCase().includes(q) ||
+      r.tags.some(t => t.toLowerCase().includes(q)) ||
+      r.ingredients?.some(i => i.name.toLowerCase().includes(q)) ||
+      r.note?.toLowerCase().includes(q)
+    )
+  })
 
   const sortedFiltered = [...filtered].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt)
@@ -557,6 +567,25 @@ export default function RecipeDBPage() {
         <div className="bg-red-50 text-red-500 text-xs rounded-xl px-4 py-3">{error}</div>
       )}
 
+      {/* 検索バー */}
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <input
+          className="w-full border border-gray-200 rounded-xl pl-8 pr-8 py-2 text-sm focus:outline-none focus:border-green-400"
+          placeholder="料理名・タグ・材料で検索"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            onClick={() => setSearchQuery('')}
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
       {/* カテゴリフィルター */}
       <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
         <button
@@ -596,8 +625,14 @@ export default function RecipeDBPage() {
       {!isLoading && sortedFiltered.length === 0 && (
         <div className="text-center py-12 text-gray-400">
           <p className="text-4xl mb-3">🍳</p>
-          <p className="text-sm">レシピがまだありません</p>
-          <p className="text-sm">「レシピを登録する」から追加してください</p>
+          {q ? (
+            <p className="text-sm">「{searchQuery}」に一致するレシピはありません</p>
+          ) : (
+            <>
+              <p className="text-sm">レシピがまだありません</p>
+              <p className="text-sm">「レシピを登録する」から追加してください</p>
+            </>
+          )}
         </div>
       )}
 

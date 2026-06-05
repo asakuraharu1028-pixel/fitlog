@@ -91,6 +91,17 @@ const INGREDIENT_PROMPT = `あなたは栄養士アシスタントです。レ�
 - 「大さじ1」「1個」などの単位も適切にグラム換算して計算する
 - totalSodiumはしょうゆ・味噌・塩・めんつゆなどの調味料も含めた食塩相当量の合計（g）を返す`
 
+// 「A」「Ａ」などのまとまり記号を材料テキストから除去する
+// - 行全体がラベルのみの場合はその行ごと削除
+// - 行頭のインラインラベル（「A 醤油…」→「醤油…」）も削除
+function stripGroupLabels(text: string): string {
+  // 半角 A-Z ／ 全角 Ａ-Ｚ、前後に括弧類が付いてもよい
+  const label = '[\\[【(（]?[A-ZＡ-Ｚ][\\]】)）.]?'
+  const standaloneRe = new RegExp(`^\\s*${label}\\s*$`, 'gm')
+  const inlineRe     = new RegExp(`^(\\s*)${label}\\s+`, 'gm')
+  return text.replace(standaloneRe, '').replace(inlineRe, '$1').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 export async function analyzeRecipeIngredients(
   ingredientsText: string,
   servings: number
@@ -98,7 +109,8 @@ export async function analyzeRecipeIngredients(
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('APIキーが設定されていません')
 
-  const prompt = `${INGREDIENT_PROMPT}\n\n以下の材料リスト（${servings}人前）の栄養素合計を推定してください:\n${ingredientsText}`
+  const cleanedText = stripGroupLabels(ingredientsText)
+  const prompt = `${INGREDIENT_PROMPT}\n\n以下の材料リスト（${servings}人前）の栄養素合計を推定してください:\n${cleanedText}`
 
   let text: string
 
