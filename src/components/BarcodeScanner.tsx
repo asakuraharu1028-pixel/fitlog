@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
-import { MultiFormatReader, BinaryBitmap, HybridBinarizer, RGBLuminanceSource } from '@zxing/library'
+import { MultiFormatReader, BinaryBitmap, HybridBinarizer, GlobalHistogramBinarizer, RGBLuminanceSource, DecodeHintType } from '@zxing/library'
 import { X, Camera as CameraIcon, Keyboard } from 'lucide-react'
 
 interface Props {
@@ -8,41 +8,80 @@ interface Props {
   onClose: () => void
 }
 
-export default function BarcodeScanner({ onDetected, onClose }: Props) {
-  const [decoding, setDecoding] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [manualInput, setManualInput] = useState('')
-  const [showManual, setShowManual] = useState(false)
+// Android WebView / Chrome に組み込みの BarcodeDetector 型定義
+interface BarcodeDetectorResult { rawValue: string }
+interface BarcodeDetectorAPI {
+  detect(image: ImageBitmap): Promise<BarcodeDetectorResult[]>
+}
+declare const BarcodeDetector: {
+  new(opts: { formats: string[] }): BarcodeDetectorAPI
+} | undefined
 
-  const decodeFromDataUrl = (dataUrl: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => {
-        // 長辺を 1200px に抑えてリサイズ（ZXing は高解像度で失敗しやすい）
-        const MAX = 1200
+async function decodeWithNativeApi(dataUrl: string): Promise<string | null> {
+  if (typeof BarcodeDetector === 'undefined') return null
+  try {
+    const res = await fetch(dataUrl)
+    const blob = await res.blob()
+    const bitmap = await createImageBitmap(blob)
+    const detector = new BarcodeDetector({
+      formats: ['ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e', 'qr_code'],
+    })
+    const results = await detector.detect(bitmap)
+    return results.length > 0 ? results[0].rawValue : null
+  } catch {
+    return null
+  }
+}
+
+function decodeWithZxing(canvas: HTMLCanvasElement): string {
+  const { width: w, height: h } = canvas
+  const ctx = canvas.getContext('2d')!
+  const imageData = ctx.getImageData(0, 0, w, h)
+  const luminanceSource = new RGBLuminanceSource(imageData.data, w, h)
+
+  const hints = new Map()
+  hints.set(DecodeHintType.TRY_HARDER, true)
+  const reader = new MultiFormatReader()
+  reader.setHints(hints)
+
+  for (const Binarizer of [HybridBinarizer, GlobalHistogramBinarizer]) {
+    try {
+      const bitmap = new BinaryBitmap(new Binarizer(luminanceSource))
+      return reader.decode(bitmap).getText()
+    } catch { /* 次へ */ }
+  }
+  throw new Error('NotFoundException')
+}
+
+function decodeWithZxingFromDataUrl(dataUrl: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      for (const MAX of [1200, 800, 500]) {
         const scale = Math.min(1, MAX / Math.max(img.width, img.height))
         const w = Math.round(img.width * scale)
         const h = Math.round(img.height * scale)
         const canvas = document.createElement('canvas')
         canvas.width = w
         canvas.height = h
-        const ctx = canvas.getContext('2d')!
-        ctx.drawImage(img, 0, 0, w, h)
-
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
         try {
-          const imageData = ctx.getImageData(0, 0, w, h)
-          const luminanceSource = new RGBLuminanceSource(imageData.data, w, h)
-          const bitmap = new BinaryBitmap(new HybridBinarizer(luminanceSource))
-          const result = new MultiFormatReader().decode(bitmap)
-          resolve(result.getText())
-        } catch {
-          reject(new Error('NotFoundException'))
-        }
+          resolve(decodeWithZxing(canvas))
+          return
+        } catch { /* 次のスケールへ */ }
       }
-      img.onerror = () => reject(new Error('画像を読み込めませんでした'))
-      img.src = dataUrl
-    })
-  }
+      reject(new Error('NotFoundException'))
+    }
+    img.onerror = () => reject(new Error('画像を読み込めませんでした'))
+    img.src = dataUrl
+  })
+}
+
+export default function BarcodeScanner({ onDetected, onClose }: Props) {
+  const [decoding, setDecoding] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [manualInput, setManualInput] = useState('')
+  const [showManual, setShowManual] = useState(false)
 
   const handleCapture = async () => {
     setError(null)
@@ -53,19 +92,25 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
         source: CameraSource.Camera,
-        width: 1200,   // Capacitor 側でもリサイズ
-        height: 1200,
+        width: 800,
+        height: 800,
         correctOrientation: true,
       })
       if (!photo.dataUrl) throw new Error('画像を取得できませんでした')
-      const code = await decodeFromDataUrl(photo.dataUrl)
+
+      // 1. ネイティブ BarcodeDetector（Android WebView組み込み）を優先
+      const native = await decodeWithNativeApi(photo.dataUrl)
+      if (native) { onDetected(native); return }
+
+      // 2. ZXing フォールバック
+      const code = await decodeWithZxingFromDataUrl(photo.dataUrl)
       onDetected(code)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       if (msg.includes('cancel') || msg.includes('Cancel') || msg.includes('dismissed')) {
         // キャンセルは無視
       } else if (msg.includes('NotFoundException') || msg.includes('No MultiFormat')) {
-        setError('バーコードを読み取れませんでした。枠内にバーコードだけが映るよう近づけて撮影してください。')
+        setError('バーコードを読み取れませんでした。バーコードだけを画面いっぱいに写して撮影してください。')
       } else {
         setError(`エラー: ${msg}`)
       }
@@ -101,7 +146,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
           <>
             <CameraIcon size={36} />
             <span className="text-sm font-medium">カメラでバーコードを撮影</span>
-            <span className="text-xs text-gray-400">バーコード部分だけを写してください</span>
+            <span className="text-xs text-gray-400">バーコードを画面いっぱいに写してください</span>
           </>
         )}
       </button>
