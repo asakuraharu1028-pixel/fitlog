@@ -96,14 +96,22 @@ async function fetchIngredientsFromAI(
 }
 
 // ── 数量の合算 ───────────────────────────────────────────────
-// "200g" → { num: 200, unit: "g" }  "大さじ1" → { num: 1, unit: "大さじ" }  "1個" → { num: 1, unit: "個" }
+// "200g" → { num: 200, unit: "g" }  "大さじ1と1/3" → { num: 4/3, unit: "大さじ" }
 function parseAmount(amount: string): { num: number; unit: string } | null {
-  const m = amount.trim().match(/^([大小]さじ|カップ)?(\d+(?:\.\d+)?)(?:\/(\d+))?\s*(.*)$/)
+  const s = amount.trim()
+  // "大さじ1と1/3" / "小さじ1と1/2" などの混合分数
+  const mixed = s.match(/^([大小]さじ|カップ)(\d+)と(\d+)\/(\d+)$/)
+  if (mixed) {
+    const num = parseFloat(mixed[2]) + parseFloat(mixed[3]) / parseFloat(mixed[4])
+    return { num, unit: mixed[1] }
+  }
+  // 通常: (prefix)(整数or小数)(/ 分母)(suffix)
+  const m = s.match(/^([大小]さじ|カップ)?(\d+(?:\.\d+)?)(?:\/(\d+))?\s*(.*)$/)
   if (!m) return null
   const prefix = m[1] ?? ''
   const num    = parseFloat(m[2]) / (m[3] ? parseFloat(m[3]) : 1)
   const suffix = m[4].trim()
-  const unit   = prefix ? prefix : suffix
+  const unit   = prefix || suffix
   return { num, unit }
 }
 
@@ -127,25 +135,45 @@ function mergeAmounts(amounts: string[]): string {
 }
 
 // ── 食材名の正規化 ───────────────────────────────────────────
-// AIが "牛乳: 100" のように name に数量を混入させた場合を吸収する
-function normalizeIngredient(name: string, amount: string): { name: string; amount: string } {
-  // "牛乳: 100" + "ml"  →  name="牛乳", amount="100ml"
-  const colonNum = name.match(/^(.+?):\s*(\d[\d./]*)$/)
-  if (colonNum) {
-    return {
-      name:   colonNum[1].trim(),
-      amount: (colonNum[2] + amount.trim()).trim(),
+function normalizeIngredient(rawName: string, rawAmount: string): { name: string; amount: string } {
+  let name   = rawName.trim()
+  let amount = rawAmount.trim()
+
+  // Step 1: グループ記号を除去
+  //   "Aしょうゆ:"  "Bサラダ油:" → コロン付き大文字1字
+  name = name.replace(/^[A-Z]\s*[:：]\s*/u, '')
+  //   "A塩" "B砂糖" → コロンなし・直後が日本語文字
+  name = name.replace(/^[A-Z](?=[ぁ-んァ-ン一-龥])/u, '')
+  //   "【A】材料" "[合わせ調味料]"
+  name = name.replace(/^【[^】]*】\s*/u, '').replace(/^\[[^\]]*\]\s*/u, '')
+
+  // Step 2: 壊れた括弧 "(数値" + "単位)" を修復 → 重量換算は不要なので除去
+  //   "油: 小さじ1/4 (1"  + "g)"  →  "油: 小さじ1/4"  + ""
+  const brokenBracket = name.match(/^(.*?)\s*\([\d./]+\s*$/)
+  if (brokenBracket && /^[a-zA-Zg㎖cc]+\)/.test(amount)) {
+    name   = brokenBracket[1]
+    amount = ''
+  }
+
+  // Step 3: "食材名: 量" または "食材名 量" 形式の分離
+  //   "しょうゆ: 小さじ1と1/3"  →  name="しょうゆ"  amount="小さじ1と1/3"
+  //   "牛乳: 100ml"             →  name="牛乳"       amount="100ml"
+  const withColon = name.match(/^([^\d：:]+?)\s*[:：]\s*(.+)$/)
+  if (withColon) {
+    name = withColon[1].trim()
+    const afterColon = withColon[2].trim()
+    if (!amount) {
+      amount = afterColon
+    } else if (/^\d/.test(afterColon) && /^[^\d]/.test(amount)) {
+      // "牛乳: 100" + "ml" → amount="100ml"
+      amount = afterColon + amount
     }
   }
-  // "牛乳 100" + "ml"  →  name="牛乳", amount="100ml"
-  const spaceNum = name.match(/^(.+?)\s+(\d[\d./]*)$/)
-  if (spaceNum && /^[a-zA-Zぁ-んァ-ン一-龥々]/.test(amount.trim())) {
-    return {
-      name:   spaceNum[1].trim(),
-      amount: (spaceNum[2] + amount.trim()).trim(),
-    }
-  }
-  return { name: name.trim(), amount: amount.trim() }
+
+  // Step 4: 末尾の余分なコロンを除去
+  name = name.replace(/[:：]+$/, '').trim()
+
+  return { name, amount }
 }
 
 // ── 同カテゴリ内で同名食材をまとめる ─────────────────────────
