@@ -148,6 +148,35 @@ export interface WeeklyMealPlan {
   days: DayMealPlan[]
 }
 
+export type IngredientCategory =
+  | '肉類'
+  | '魚介類'
+  | '野菜'
+  | 'きのこ類'
+  | '豆腐・大豆'
+  | '卵・乳製品'
+  | '穀物・麺類'
+  | '調味料・油'
+  | 'その他'
+
+export interface ShoppingIngredient {
+  name: string
+  amount: string
+  category: IngredientCategory
+  fromRecipe: string  // どの料理由来か
+}
+
+export interface ShoppingCategoryGroup {
+  category: IngredientCategory
+  items: ShoppingIngredient[]
+}
+
+export interface ShoppingListData {
+  dbList: ShoppingCategoryGroup[]     // DBレシピ由来
+  otherList: ShoppingCategoryGroup[]  // DB未登録料理由来
+  generatedAt: string
+}
+
 export interface TemplateFoodItem {
   id: string
   name: string

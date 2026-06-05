@@ -27,6 +27,7 @@ import Calendar from './pages/Calendar'
 import Settings from './pages/Settings'
 import MealPlan from './pages/MealPlan'
 import RecipeDB from './pages/RecipeDB'
+import ShoppingList from './pages/ShoppingList'
 import OAuthCallback from './pages/OAuthCallback'
 
 export default function App() {
@@ -83,6 +84,7 @@ export default function App() {
                   <Route path="settings" element={<Settings />} />
                   <Route path="mealplan" element={<MealPlan />} />
                   <Route path="recipedb" element={<RecipeDB />} />
+                  <Route path="shoppinglist" element={<ShoppingList />} />
                 </Route>
               </Routes>
             )
