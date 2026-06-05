@@ -98,7 +98,7 @@ export function stripGroupLabels(text: string): string {
   // 半角 A-Z ／ 全角 Ａ-Ｚ、前後に括弧類が付いてもよい
   const label = '[\\[【(（]?[A-ZＡ-Ｚ][\\]】)）.]?'
   const standaloneRe = new RegExp(`^\\s*${label}\\s*$`, 'gm')
-  const inlineRe     = new RegExp(`^(\\s*)${label}\\s+`, 'gm')
+  const inlineRe     = new RegExp(`^(\\s*)${label}\\s*`, 'gm')
   return text.replace(standaloneRe, '').replace(inlineRe, '$1').replace(/\n{3,}/g, '\n\n').trim()
 }
 
