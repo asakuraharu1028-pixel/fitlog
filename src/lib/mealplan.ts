@@ -40,7 +40,8 @@ function buildRecipeSection(recipes: Recipe[]): string {
     lines.push(`■ ${CATEGORY_JP[cat]}`)
     for (const r of list) {
       const sodium = r.sodium != null ? ` 塩${r.sodium}g` : ''
-      lines.push(`  - ${r.name}：${r.calories}kcal P${r.protein}g F${r.fat}g C${r.carbs}g${sodium}`)
+      const url = r.sourceUrl ? ` url:${r.sourceUrl}` : ''
+      lines.push(`  - ${r.name}：${r.calories}kcal P${r.protein}g F${r.fat}g C${r.carbs}g${sodium}${url}`)
     }
   }
   lines.push('')
@@ -62,7 +63,7 @@ function buildPrompt(goalCalories: number, recipes: Recipe[]): string {
 - カロリー配分目安: 朝食 ${breakfastCal}kcal、昼食 ${lunchCal}kcal、夕食 ${dinnerCal}kcal、間食 ${snackCal}kcal
 - プロテインサプリメントは1日最大30gまで（間食に組み込み可）
 - 夕食の構成: 主菜・主食・副菜(1〜2種)・汁物（省略・変更も可）
-- レシピURLはDBに sourceUrl がある場合はそれを使用。ない場合は https://oishi-kenko.com/recipes?q=料理名 の形式で記載
+- レシピURLはDBの各レシピに url: で記載されている場合はその値をそのまま使用。url: がない場合は https://oishi-kenko.com/recipes?q=料理名 の形式で記載
 - 7日間で食材・料理が偏らないよう多様な献立にする（DBのレシピが複数ある場合は7日間で分散させる）
 - 栄養バランス（P:F:C = 15-20% : 20-25% : 55-65%）を意識する
 - 食塩相当量は1日6.5g未満を目安にする（汁物・漬物・加工食品の塩分に注意）${buildRecipeSection(recipes)}
