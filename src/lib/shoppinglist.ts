@@ -160,29 +160,42 @@ function mergeAmounts(amounts: string[]): string {
 }
 
 // ── 食材名の正規化 ───────────────────────────────────────────
-function normalizeIngredient(rawName: string, rawAmount: string): { name: string; amount: string } {
+function normalizeIngredient(
+  rawName: string,
+  rawAmount: string
+): { name: string; amount: string; note: string } {
   let name   = rawName.trim()
   let amount = rawAmount.trim()
+  let note   = ''
 
   // Step 1: グループ記号を除去
-  //   "Aしょうゆ:"  "Bサラダ油:" → コロン付き大文字1字
+  //   "A:"  "B:"  "A: " (コロン付き)
   name = name.replace(/^[A-Z]\s*[:：]\s*/u, '')
-  //   "A塩" "B砂糖" → コロンなし・直後が日本語文字
-  name = name.replace(/^[A-Z](?=[ぁ-んァ-ン一-龥])/u, '')
-  //   "【A】材料" "[合わせ調味料]"
+  //   "A塩"  "A 塩" (スペースありなし、直後が日本語)
+  name = name.replace(/^[A-Z]\s*(?=[ぁ-んァ-ン一-龥])/u, '')
+  //   "【A】材料"  "[合わせ調味料]"
   name = name.replace(/^【[^】]*】\s*/u, '').replace(/^\[[^\]]*\]\s*/u, '')
 
-  // Step 2: 壊れた括弧 "(数値" + "単位)" を修復 → 重量換算は不要なので除去
-  //   "油: 小さじ1/4 (1"  + "g)"  →  "油: 小さじ1/4"  + ""
+  // Step 2: 壊れた括弧 "(数値" + "単位)" を除去（重量換算不要）
   const brokenBracket = name.match(/^(.*?)\s*\([\d./]+\s*$/)
   if (brokenBracket && /^[a-zA-Zg㎖cc]+\)/.test(amount)) {
     name   = brokenBracket[1]
     amount = ''
   }
 
-  // Step 3: "食材名: 量" または "食材名 量" 形式の分離
-  //   "しょうゆ: 小さじ1と1/3"  →  name="しょうゆ"  amount="小さじ1と1/3"
-  //   "牛乳: 100ml"             →  name="牛乳"       amount="100ml"
+  // Step 3: 材料名の括弧内容を note として抽出し、名前から除去
+  //   "鶏むね肉（皮なし）" → name="鶏むね肉"  note="皮なし"
+  //   "砂糖（カラメル用）" → name="砂糖"       note="カラメル用"
+  name = name.replace(/[（(][^）)]*[）)]/gu, (match) => {
+    const inner = match.slice(1, -1).trim()
+    if (inner) note = note ? `${note}・${inner}` : inner
+    return ''
+  }).trim()
+
+  // Step 4: amount の括弧内容も除去（"大さじ1（15ml）" → "大さじ1"）
+  amount = amount.replace(/[（(][^）)]*[）)]/gu, '').trim()
+
+  // Step 5: "食材名: 量" 形式の分離
   const withColon = name.match(/^([^\d：:]+?)\s*[:：]\s*(.+)$/)
   if (withColon) {
     name = withColon[1].trim()
@@ -190,38 +203,42 @@ function normalizeIngredient(rawName: string, rawAmount: string): { name: string
     if (!amount) {
       amount = afterColon
     } else if (/^\d/.test(afterColon) && /^[^\d]/.test(amount)) {
-      // "牛乳: 100" + "ml" → amount="100ml"
       amount = afterColon + amount
     }
   }
 
-  // Step 4: 末尾の余分なコロンを除去
+  // Step 6: 末尾のコロンを除去
   name = name.replace(/[:：]+$/, '').trim()
 
-  return { name, amount }
+  return { name, amount, note }
 }
 
 // ── 同カテゴリ内で同名食材をまとめる ─────────────────────────
 function mergeIngredients(ingredients: ShoppingIngredient[]): ShoppingIngredient[] {
-  // まず名前を正規化してから key にする
   const normalized = ingredients.map(item => {
-    const { name, amount } = normalizeIngredient(item.name, item.amount)
-    return { ...item, name, amount }
+    const { name, amount, note } = normalizeIngredient(item.name, item.amount)
+    return { ...item, name, amount, note: note || undefined }
   })
 
-  const map = new Map<string, { amounts: string[]; fromRecipes: string[] }>()
-  for (const item of normalized) {
+  // 名前が空になったものはスキップ
+  const valid = normalized.filter(i => i.name.length > 0)
+
+  const map = new Map<string, { amounts: string[]; fromRecipes: string[]; notes: string[] }>()
+  for (const item of valid) {
     const key  = item.name
-    const prev = map.get(key) ?? { amounts: [], fromRecipes: [] }
+    const prev = map.get(key) ?? { amounts: [], fromRecipes: [], notes: [] }
     prev.amounts.push(item.amount)
     if (!prev.fromRecipes.includes(item.fromRecipe)) prev.fromRecipes.push(item.fromRecipe)
+    if (item.note && !prev.notes.includes(item.note))  prev.notes.push(item.note)
     map.set(key, prev)
   }
-  return [...map.entries()].map(([name, { amounts, fromRecipes }]) => ({
+
+  return [...map.entries()].map(([name, { amounts, fromRecipes, notes }]) => ({
     name,
     amount:     mergeAmounts(amounts.filter(Boolean)),
-    category:   normalized.find(i => i.name === name)!.category,
+    category:   valid.find(i => i.name === name)!.category,
     fromRecipe: fromRecipes.join('・'),
+    note:       notes.length > 0 ? notes.join('・') : undefined,
   }))
 }
 

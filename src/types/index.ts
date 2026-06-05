@@ -163,7 +163,8 @@ export interface ShoppingIngredient {
   name: string
   amount: string
   category: IngredientCategory
-  fromRecipe: string  // どの料理由来か
+  fromRecipe: string   // どの料理由来か
+  note?: string        // 括弧内の備考（例: "皮なし"、"下味用"）
 }
 
 export interface ShoppingCategoryGroup {

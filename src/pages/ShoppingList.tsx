@@ -58,6 +58,12 @@ function RecipePopup({ ingredient, onClose }: { ingredient: ShoppingIngredient; 
             </li>
           ))}
         </ul>
+        {ingredient.note && (
+          <div className="mt-4 bg-gray-50 rounded-xl px-3 py-2">
+            <p className="text-[10px] text-gray-400 mb-1">備考</p>
+            <p className="text-xs text-gray-600">{ingredient.note}</p>
+          </div>
+        )}
       </div>
     </div>
   )
