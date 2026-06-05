@@ -1,20 +1,20 @@
 import { getApiKey } from './gemini'
+import { loadFileFromDrive, saveFileToDrive } from './google'
 import type { WeeklyMealPlan, DayMealPlan, Recipe, RecipeCategory } from '../types'
 import { nanoid } from 'nanoid'
 
-const MEALPLAN_STORAGE_KEY = 'fitlog-mealplan'
+const MEALPLAN_FILE = 'mealplan.json'
 
-export function loadSavedMealPlan(): WeeklyMealPlan | null {
+export async function loadSavedMealPlan(): Promise<WeeklyMealPlan | null> {
   try {
-    const raw = localStorage.getItem(MEALPLAN_STORAGE_KEY)
-    return raw ? (JSON.parse(raw) as WeeklyMealPlan) : null
+    return await loadFileFromDrive<WeeklyMealPlan>(MEALPLAN_FILE)
   } catch {
     return null
   }
 }
 
-export function saveMealPlan(plan: WeeklyMealPlan) {
-  localStorage.setItem(MEALPLAN_STORAGE_KEY, JSON.stringify(plan))
+export async function saveMealPlan(plan: WeeklyMealPlan): Promise<void> {
+  await saveFileToDrive(MEALPLAN_FILE, plan)
 }
 
 function isOpenRouterKey(key: string) {
@@ -140,6 +140,6 @@ export async function generateWeeklyMealPlan(goalCalories: number, recipes: Reci
     goalCalories,
     days,
   }
-  saveMealPlan(plan)
+  await saveMealPlan(plan)
   return plan
 }

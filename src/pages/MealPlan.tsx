@@ -189,15 +189,17 @@ export default function MealPlan() {
 
   useEffect(() => { loadDB() }, [loadDB])
 
-  const [plan, setPlan] = useState<WeeklyMealPlan | null>(() => loadSavedMealPlan())
+  const [plan, setPlan] = useState<WeeklyMealPlan | null>(null)
+  const [loadingPlan, setLoadingPlan] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const goalCalories = data.settings.goalCalories ?? 2000
 
   useEffect(() => {
-    const saved = loadSavedMealPlan()
-    if (saved) setPlan(saved)
+    loadSavedMealPlan()
+      .then(saved => { if (saved) setPlan(saved) })
+      .finally(() => setLoadingPlan(false))
   }, [])
 
   const handleGenerate = async () => {
@@ -285,8 +287,13 @@ export default function MealPlan() {
         </div>
       )}
 
+      {/* Drive読み込み中 */}
+      {loadingPlan && (
+        <p className="text-center text-sm text-gray-400 py-8">献立を読み込み中...</p>
+      )}
+
       {/* 献立表示 */}
-      {plan && !generating && (
+      {plan && !generating && !loadingPlan && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-600">7日間の献立</h2>
@@ -303,7 +310,7 @@ export default function MealPlan() {
       )}
 
       {/* 初期状態（未生成） */}
-      {!plan && !generating && hasApiKey && (
+      {!plan && !generating && !loadingPlan && hasApiKey && (
         <div className="text-center py-12 text-gray-400">
           <p className="text-4xl mb-3">🍱</p>
           <p className="text-sm">上のボタンで1週間分の献立を</p>
