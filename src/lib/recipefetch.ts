@@ -1,4 +1,4 @@
-import { getApiKey } from './gemini'
+import { getApiKey, stripGroupLabels } from './gemini'
 
 export interface FetchedRecipe {
   name: string
@@ -154,7 +154,7 @@ ${text}`
   return {
     name:            parsed.name ?? '',
     servings:        parsed.servings ?? 1,
-    ingredientsText: (parsed.ingredients ?? []).join('\n'),
+    ingredientsText: stripGroupLabels((parsed.ingredients ?? []).join('\n')),
     note:            parsed.note ?? '',
     sourceUrl:       url,
   }
@@ -170,7 +170,7 @@ export async function fetchRecipeFromUrl(url: string): Promise<FetchedRecipe> {
     return {
       name:            schema.name ?? '',
       servings:        parseServings(schema.recipeYield),
-      ingredientsText: schema.recipeIngredient.join('\n'),
+      ingredientsText: stripGroupLabels(schema.recipeIngredient.join('\n')),
       note:            schema.description?.slice(0, 200) ?? '',
       sourceUrl:       url,
     }

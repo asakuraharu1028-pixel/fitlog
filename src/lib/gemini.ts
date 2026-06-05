@@ -94,7 +94,7 @@ const INGREDIENT_PROMPT = `あなたは栄養士アシスタントです。レ�
 // 「A」「Ａ」などのまとまり記号を材料テキストから除去する
 // - 行全体がラベルのみの場合はその行ごと削除
 // - 行頭のインラインラベル（「A 醤油…」→「醤油…」）も削除
-function stripGroupLabels(text: string): string {
+export function stripGroupLabels(text: string): string {
   // 半角 A-Z ／ 全角 Ａ-Ｚ、前後に括弧類が付いてもよい
   const label = '[\\[【(（]?[A-ZＡ-Ｚ][\\]】)）.]?'
   const standaloneRe = new RegExp(`^\\s*${label}\\s*$`, 'gm')
