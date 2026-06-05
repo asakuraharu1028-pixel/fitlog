@@ -91,6 +91,56 @@ async function fetchIngredientsFromAI(
   return result
 }
 
+// ── 数量の合算 ───────────────────────────────────────────────
+// "200g" → { num: 200, unit: "g" }  "大さじ1" → { num: 1, unit: "大さじ" }  "1個" → { num: 1, unit: "個" }
+function parseAmount(amount: string): { num: number; unit: string } | null {
+  const m = amount.trim().match(/^([大小]さじ|カップ)?(\d+(?:\.\d+)?)(?:\/(\d+))?\s*(.*)$/)
+  if (!m) return null
+  const prefix = m[1] ?? ''
+  const num    = parseFloat(m[2]) / (m[3] ? parseFloat(m[3]) : 1)
+  const suffix = m[4].trim()
+  const unit   = prefix ? prefix : suffix
+  return { num, unit }
+}
+
+function mergeAmounts(amounts: string[]): string {
+  if (amounts.length === 1) return amounts[0]
+
+  // 全て同じ単位で数値が取れる場合は合計
+  const parsed = amounts.map(parseAmount)
+  if (parsed.every(p => p !== null)) {
+    const units = [...new Set(parsed.map(p => p!.unit))]
+    if (units.length === 1) {
+      const total = parsed.reduce((s, p) => s + p!.num, 0)
+      const formatted = Number.isInteger(total) ? String(total) : String(Math.round(total * 10) / 10)
+      return formatted + units[0]
+    }
+  }
+
+  // 単位が違う or 解析不能 → 重複を除いて「＋」で連結
+  const unique = [...new Set(amounts)]
+  return unique.join(' ＋ ')
+}
+
+// ── 同カテゴリ内で同名食材をまとめる ─────────────────────────
+function mergeIngredients(ingredients: ShoppingIngredient[]): ShoppingIngredient[] {
+  // key = 食材名（カタカナ・ひらがな表記揺れを吸収する場合は正規化も可）
+  const map = new Map<string, { amounts: string[]; fromRecipes: string[] }>()
+  for (const item of ingredients) {
+    const key  = item.name.trim()
+    const prev = map.get(key) ?? { amounts: [], fromRecipes: [] }
+    prev.amounts.push(item.amount)
+    if (!prev.fromRecipes.includes(item.fromRecipe)) prev.fromRecipes.push(item.fromRecipe)
+    map.set(key, prev)
+  }
+  return [...map.entries()].map(([name, { amounts, fromRecipes }]) => ({
+    name,
+    amount:     mergeAmounts(amounts),
+    category:   ingredients.find(i => i.name.trim() === name)!.category,
+    fromRecipe: fromRecipes.join('・'),
+  }))
+}
+
 // ── カテゴリグループに変換 ───────────────────────────────────
 function groupByCategory(ingredients: ShoppingIngredient[]): ShoppingCategoryGroup[] {
   const ORDER: IngredientCategory[] = [
@@ -104,7 +154,10 @@ function groupByCategory(ingredients: ShoppingIngredient[]): ShoppingCategoryGro
   }
   return ORDER
     .filter(cat => map.has(cat))
-    .map(cat => ({ category: cat, items: map.get(cat)! }))
+    .map(cat => ({
+      category: cat,
+      items: mergeIngredients(map.get(cat)!),
+    }))
 }
 
 // ── メイン: 買い物リスト生成 ─────────────────────────────────
