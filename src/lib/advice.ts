@@ -127,9 +127,11 @@ export async function getMealSuggestion(data: AppData): Promise<string> {
 
   if (unregistered.length === 0) return ''
 
-  const totalProtein = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.protein, 0)
-  const totalFat     = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.fat, 0)
-  const totalCarbs   = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.carbs, 0)
+  const allEntries   = todayLogs.flatMap(m => m.entries)
+  const totalProtein = allEntries.reduce((s, e) => s + e.protein, 0)
+  const totalFat     = allEntries.reduce((s, e) => s + e.fat, 0)
+  const totalCarbs   = allEntries.reduce((s, e) => s + e.carbs, 0)
+  const totalSaltG   = allEntries.reduce((s, e) => s + (e.sodium ?? 0), 0) * 2.54 / 1000
 
   const registeredSummary = todayLogs.length > 0
     ? todayLogs.map(m => `${MEAL_TYPE_LABEL[m.mealType] ?? m.mealType}: ${m.entries.map(e => e.foodName).join('・')}（${m.entries.reduce((s, e) => s + e.calories, 0)}kcal）`).join('\n')
@@ -143,10 +145,11 @@ export async function getMealSuggestion(data: AppData): Promise<string> {
 ${registeredSummary}
 残りの未記録食事：${unregistered.join('・')}
 今日の状況：摂取済み${intake}kcal / 目標${goal}kcal / 消費${burned}kcal / 残り摂取可能${remaining}kcal
-摂取済みPFC：P${totalProtein.toFixed(1)}g / F${totalFat.toFixed(1)}g / C${totalCarbs.toFixed(1)}g${weightLine ? `\n${weightLine}` : ''}
+摂取済みPFC：P${totalProtein.toFixed(1)}g / F${totalFat.toFixed(1)}g / C${totalCarbs.toFixed(1)}g
+摂取済み塩分相当量：${totalSaltG.toFixed(1)}g（目標上限：男性7.5g・女性6.5g）${weightLine ? `\n${weightLine}` : ''}
 残りの${unregistered.join('・')}について、カロリーと栄養バランスを考慮した具体的な献立を提案してください。各食事の食品名と目安量を簡潔に箇条書きで示してください。`
 
-  const suggestionSystemPrompt = `あなたは栄養士です。ユーザーの食事記録とカロリー・栄養バランスを元に、残りの食事の具体的な献立を提案します。アドバイスや感想は不要です。食事ごとに食品名と目安量（g）を箇条書きで簡潔に示してください。`
+  const suggestionSystemPrompt = `あなたは栄養士です。ユーザーの食事記録とカロリー・PFC・塩分バランスを元に、残りの食事の具体的な献立を提案します。アドバイスや感想は不要です。食事ごとに食品名と目安量（g）を箇条書きで簡潔に示してください。塩分が多い場合は薄味の料理を優先してください。`
   return callAI(prompt, data, suggestionSystemPrompt)
 }
 
