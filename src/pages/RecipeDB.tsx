@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed, Search, X } from 'lucide-react'
 import { useRecipeStore } from '../lib/recipedb'
-import { analyzeRecipeIngredients, getApiKey } from '../lib/gemini'
+import { analyzeRecipeIngredients, getApiKey, stripGroupLabels } from '../lib/gemini'
 import { fetchRecipeFromUrl } from '../lib/recipefetch'
 import type { Recipe, RecipeCategory, RecipeIngredient } from '../types'
 import type { AiFoodResult } from '../lib/gemini'
@@ -75,7 +75,7 @@ function toFormState(r: Recipe): FormState {
     fat:             r.fat,
     carbs:           r.carbs,
     sodium:          r.sodium ?? 0,
-    ingredientsText: ingredientsToText(r.ingredients),
+    ingredientsText: stripGroupLabels(ingredientsToText(r.ingredients)),
     note:            r.note ?? '',
     sourceUrl:       r.sourceUrl ?? '',
   }
