@@ -6,6 +6,7 @@ import type { AdvisorCharacterId } from '../lib/characters'
 import { loadFromDrive, saveToDrive, getAccessToken } from '../lib/google'
 import { localDateStr } from '../lib/utils'
 import type { BodyRecord, DietPolicy } from '../types'
+type Gender = 'male' | 'female'
 import { isNative } from '../lib/auth'
 import {
   hcCheckAvailability, hcCheckPermissions, hcOpenPermissions,
@@ -35,6 +36,12 @@ const POLICY_DESC: Record<DietPolicy, string> = {
   exercise: '食事 20% / 運動 80%',
 }
 
+/** Mifflin-St Jeor 式による基礎代謝推算 */
+function calcBmrEstimate(weightKg: number, heightCm: number, age: number, gender: Gender): number {
+  const base = 10 * weightKg + 6.25 * heightCm - 5 * age
+  return Math.round(gender === 'male' ? base + 5 : base - 161)
+}
+
 /** 摂取・消費目標カロリーを計算する */
 function calcGoals(
   currentWeight: number,
@@ -58,14 +65,17 @@ function calcGoals(
 type WarnLevel = 'danger' | 'caution'
 interface Warning { level: WarnLevel; message: string }
 
-function getWarnings(goals: { intake: number; burn: number; dailyDeficit: number }): Warning[] {
+function getWarnings(goals: { intake: number; burn: number; dailyDeficit: number }, gender?: Gender): Warning[] {
   const w: Warning[] = []
   const { intake, burn, dailyDeficit } = goals
 
-  // 摂取カロリー
-  if (intake < 1200) {
-    w.push({ level: 'danger',  message: `目標摂取カロリー（${intake} kcal）が健康的な最低ライン（1,200 kcal）を下回っています。目標期間を延ばすか、方針を見直してください。` })
-  } else if (intake < 1500) {
+  // 性別による最低摂取カロリーの閾値
+  const dangerLimit  = gender === 'male' ? 1500 : 1200
+  const cautionLimit = gender === 'male' ? 1800 : 1400
+
+  if (intake < dangerLimit) {
+    w.push({ level: 'danger',  message: `目標摂取カロリー（${intake} kcal）が健康的な最低ライン（${dangerLimit.toLocaleString()} kcal）を下回っています。目標期間を延ばすか、方針を見直してください。` })
+  } else if (intake < cautionLimit) {
     w.push({ level: 'caution', message: `目標摂取カロリー（${intake} kcal）はかなり厳しい制限です。長期間の継続には注意が必要です。` })
   }
 
@@ -92,6 +102,8 @@ export default function Settings() {
   const s = data.settings
 
   const [height, setHeight]       = useState(String(s.heightCm))
+  const [gender, setGender]       = useState<Gender | ''>(s.gender ?? '')
+  const [age, setAge]             = useState(String(s.age ?? ''))
   const [goalWeight, setGoalWeight] = useState(String(s.goalWeightKg ?? ''))
   const [bmrInput, setBmrInput]   = useState(String(s.bmr ?? ''))
   const [goalMonths, setGoalMonths] = useState(String(s.goalMonths ?? ''))
@@ -110,6 +122,8 @@ export default function Settings() {
 
   useEffect(() => {
     setHeight(String(s.heightCm))
+    setGender(s.gender ?? '')
+    setAge(String(s.age ?? ''))
     setGoalWeight(String(s.goalWeightKg ?? ''))
     setBmrInput(String(s.bmr ?? ''))
     setGoalMonths(String(s.goalMonths ?? ''))
@@ -122,11 +136,17 @@ export default function Settings() {
     return [...data.bodyRecords].sort((a, b) => b.date.localeCompare(a.date))[0].weight
   }, [data.bodyRecords])
 
-  // 基礎代謝の参考値（体重のみから簡易推算: 体重 × 22 kcal）
+  // 基礎代謝の参考値（Mifflin-St Jeor 式: 性別・年齢・身長・体重から推算）
   const bmrEstimate = useMemo(() => {
+    const h = parseFloat(height)
+    const a = parseFloat(age)
+    if (latestWeight && !isNaN(h) && h > 0 && !isNaN(a) && a > 0 && gender) {
+      return calcBmrEstimate(latestWeight, h, a, gender)
+    }
+    // フォールバック: 体重 × 22（性別・年齢未入力時）
     if (latestWeight) return Math.round(latestWeight * 22)
     return null
-  }, [latestWeight])
+  }, [latestWeight, height, age, gender])
 
   // 目標カロリー自動計算
   const goals = useMemo(() => {
@@ -137,6 +157,8 @@ export default function Settings() {
     return calcGoals(cw, gw, bmr, gm, policy)
   }, [latestWeight, goalWeight, bmrInput, bmrEstimate, goalMonths, policy])
 
+  const effectiveGender = gender || undefined
+
   const handleSave = async () => {
     const h = parseFloat(height)
     if (isNaN(h) || h <= 0) return
@@ -146,6 +168,8 @@ export default function Settings() {
         settings: {
           ...s,
           heightCm: h,
+          gender:          gender      ? gender                  : undefined,
+          age:             age         ? parseFloat(age)         : undefined,
           goalWeightKg:    goalWeight  ? parseFloat(goalWeight)  : undefined,
           bmr:             bmrInput    ? parseFloat(bmrInput)    : undefined,
           goalMonths:      goalMonths  ? parseFloat(goalMonths)  : undefined,
@@ -166,6 +190,35 @@ export default function Settings() {
       <div className="bg-white rounded-2xl p-4 shadow-sm">
         <h2 className="font-semibold text-gray-700 mb-4">基本情報</h2>
         <div className="space-y-4">
+
+          {/* 性別 */}
+          <div>
+            <span className="text-sm font-medium text-gray-600 block mb-1">性別</span>
+            <div className="flex gap-2">
+              {([['male', '男性'], ['female', '女性']] as [Gender, string][]).map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setGender(gender === val ? '' : val)}
+                  className={`flex-1 py-2 rounded-xl border-2 text-sm font-medium transition
+                    ${gender === val ? 'border-green-400 bg-green-50 text-green-700' : 'border-gray-100 text-gray-500 hover:border-gray-200'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 年齢 */}
+          <label className="block">
+            <span className="text-sm font-medium text-gray-600">年齢</span>
+            <input
+              type="number" step="1" min="1" max="120" value={age}
+              onChange={(e) => setAge(e.target.value)}
+              placeholder="例: 30"
+              className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
+            />
+          </label>
 
           {/* 身長 */}
           <label className="block">
@@ -200,7 +253,7 @@ export default function Settings() {
             />
             <p className="text-xs text-gray-400 mt-1">
               {bmrEstimate
-                ? `体重から推定値: 約 ${bmrEstimate} kcal（未入力の場合はこの値を使用）`
+                ? `推定値: 約 ${bmrEstimate} kcal${gender && age ? '（Mifflin-St Jeor 式）' : '（体重×22、性別・年齢を入力するとより正確になります）'}（未入力の場合はこの値を使用）`
                 : '体重計・健康アプリで確認した基礎代謝を入力してください'}
             </p>
           </label>
@@ -250,7 +303,7 @@ export default function Settings() {
 
           {/* 自動計算結果 */}
           {goals ? (() => {
-            const warnings = getWarnings(goals)
+            const warnings = getWarnings(goals, effectiveGender)
             const hasDanger  = warnings.some(w => w.level === 'danger')
             return (
               <div className="space-y-2">

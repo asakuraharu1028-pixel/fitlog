@@ -161,6 +161,13 @@ export interface TemplateFoodItem {
   jan?: string // JANコード（バーコード）
 }
 
+export interface PeriodLog {
+  id: string
+  startDate: string   // YYYY-MM-DD（生理開始日）
+  endDate?: string    // YYYY-MM-DD（生理終了日、任意）
+  notes?: string
+}
+
 export interface AppData {
   bodyRecords: BodyRecord[]
   mealLogs: MealLog[]
@@ -170,8 +177,13 @@ export interface AppData {
   sleepLogs: SleepLog[]
   stepLogs: StepLog[]
   adviceLogs: AdviceLog[]
+  periodLogs?: PeriodLog[]
   settings: {
     heightCm: number
+    /** 性別 */
+    gender?: 'male' | 'female'
+    /** 年齢 */
+    age?: number
     goalWeightKg?: number
     /** 目標摂取カロリー（自動計算して保存） */
     goalCalories?: number

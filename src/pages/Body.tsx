@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAppStore } from '../lib/store'
 import { localDateStr } from '../lib/utils'
-import type { BodyRecord } from '../types'
+import type { BodyRecord, PeriodLog } from '../types'
 import { nanoid } from 'nanoid'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -13,7 +13,20 @@ function calcBMI(weight: number, heightCm: number) {
   return Math.round((weight / (h * h)) * 10) / 10
 }
 
-type Period = '2w' | '1m' | '3m' | 'all'
+type ChartPeriod = '2w' | '1m' | '3m' | 'all'
+
+/** 平均生理周期（直近5件から計算、データ不足時はデフォルト28日） */
+function calcAvgCycle(logs: PeriodLog[]): number {
+  const sorted = [...logs].sort((a, b) => a.startDate.localeCompare(b.startDate))
+  if (sorted.length < 2) return 28
+  const diffs: number[] = []
+  for (let i = 1; i < Math.min(sorted.length, 6); i++) {
+    const prev = new Date(sorted[i - 1].startDate)
+    const curr = new Date(sorted[i].startDate)
+    diffs.push(Math.round((curr.getTime() - prev.getTime()) / 86400000))
+  }
+  return Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length)
+}
 
 export default function Body() {
   const { data, saveData } = useAppStore()
@@ -21,8 +34,16 @@ export default function Body() {
   const [bodyFat, setBodyFat] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [period, setPeriod] = useState<Period>('1m')
+  const [period, setPeriod] = useState<ChartPeriod>('1m')
   const [graphType, setGraphType] = useState<'weight' | 'fat' | 'bmi'>('weight')
+
+  // 生理記録
+  const [periodStart, setPeriodStart] = useState(localDateStr())
+  const [periodEnd, setPeriodEnd] = useState('')
+  const [periodNotes, setPeriodNotes] = useState('')
+  const [periodSaving, setPeriodSaving] = useState(false)
+  const [periodSaved, setPeriodSaved] = useState(false)
+  const [showPeriodForm, setShowPeriodForm] = useState(false)
 
   const today = localDateStr()
   const existing = data.bodyRecords.find((r) => r.date === today)
@@ -55,7 +76,7 @@ export default function Body() {
   // グラフ用データ生成
   const sorted = [...data.bodyRecords].sort((a, b) => a.date.localeCompare(b.date))
 
-  const periodDays: Record<Period, number> = { '2w': 14, '1m': 30, '3m': 90, 'all': 9999 }
+  const periodDays: Record<ChartPeriod, number> = { '2w': 14, '1m': 30, '3m': 90, 'all': 9999 }
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - periodDays[period])
   const cutoffStr = localDateStr(cutoff)
@@ -76,6 +97,44 @@ export default function Body() {
   const diff = latest && prev ? Math.round((latest.weight - prev.weight) * 100) / 100 : null
 
   const recent = [...sorted].reverse().slice(0, 30)
+
+  // 生理記録
+  const periodLogs = (data.periodLogs ?? []).sort((a, b) => b.startDate.localeCompare(a.startDate))
+  const latestPeriod = periodLogs[0]
+  const avgCycle = calcAvgCycle(periodLogs)
+  const nextPeriodDate = latestPeriod
+    ? (() => {
+        const d = new Date(latestPeriod.startDate)
+        d.setDate(d.getDate() + avgCycle)
+        return localDateStr(d)
+      })()
+    : null
+
+  const handlePeriodSave = async () => {
+    if (!periodStart) return
+    setPeriodSaving(true)
+    try {
+      const newLog: PeriodLog = {
+        id: nanoid(),
+        startDate: periodStart,
+        endDate: periodEnd || undefined,
+        notes: periodNotes || undefined,
+      }
+      await saveData({ periodLogs: [newLog, ...(data.periodLogs ?? [])] })
+      setPeriodSaved(true)
+      setPeriodStart(localDateStr())
+      setPeriodEnd('')
+      setPeriodNotes('')
+      setShowPeriodForm(false)
+      setTimeout(() => setPeriodSaved(false), 2000)
+    } finally {
+      setPeriodSaving(false)
+    }
+  }
+
+  const handlePeriodDelete = async (id: string) => {
+    await saveData({ periodLogs: (data.periodLogs ?? []).filter(p => p.id !== id) })
+  }
 
   return (
     <div className="p-4 space-y-4">
@@ -251,6 +310,99 @@ export default function Body() {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      {/* 生理記録 */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold text-gray-700">生理記録</h2>
+          <button
+            onClick={() => setShowPeriodForm(!showPeriodForm)}
+            className="text-sm text-pink-500 font-medium"
+          >
+            {showPeriodForm ? 'キャンセル' : '+ 記録する'}
+          </button>
+        </div>
+
+        {/* 次回予測 */}
+        {nextPeriodDate && (
+          <div className="bg-pink-50 rounded-xl px-3 py-2.5 mb-3 flex justify-between items-center">
+            <div>
+              <p className="text-xs text-pink-600 font-semibold">次回予測</p>
+              <p className="text-sm font-bold text-pink-700">{nextPeriodDate}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-pink-400">平均周期</p>
+              <p className="text-sm font-semibold text-pink-600">{avgCycle} 日</p>
+            </div>
+          </div>
+        )}
+
+        {/* 記録フォーム */}
+        {showPeriodForm && (
+          <div className="space-y-3 mb-4 border border-pink-100 rounded-xl p-3">
+            <label className="block">
+              <span className="text-sm text-gray-500">開始日 <span className="text-red-400">*</span></span>
+              <input
+                type="date" value={periodStart}
+                onChange={(e) => setPeriodStart(e.target.value)}
+                className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-400"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm text-gray-500">終了日（任意）</span>
+              <input
+                type="date" value={periodEnd}
+                onChange={(e) => setPeriodEnd(e.target.value)}
+                className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-400"
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm text-gray-500">メモ（任意）</span>
+              <input
+                type="text" value={periodNotes}
+                onChange={(e) => setPeriodNotes(e.target.value)}
+                placeholder="症状など"
+                className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-400"
+              />
+            </label>
+            <button
+              onClick={handlePeriodSave}
+              disabled={periodSaving || !periodStart}
+              className="w-full bg-pink-500 text-white rounded-xl py-2.5 font-semibold disabled:opacity-40 hover:bg-pink-600 transition"
+            >
+              {periodSaving ? '保存中...' : periodSaved ? '✓ 保存しました' : '保存'}
+            </button>
+          </div>
+        )}
+
+        {/* 記録一覧 */}
+        {periodLogs.length === 0 ? (
+          <p className="text-gray-400 text-sm">記録がありません</p>
+        ) : (
+          <ul className="space-y-2">
+            {periodLogs.slice(0, 12).map((p) => (
+              <li key={p.id} className="flex items-start justify-between text-sm border-b border-gray-50 pb-2">
+                <div>
+                  <span className="font-medium text-gray-700">{p.startDate}</span>
+                  {p.endDate && <span className="text-gray-400 ml-1">〜 {p.endDate}</span>}
+                  {p.endDate && (
+                    <span className="text-xs text-pink-400 ml-1">
+                      ({Math.round((new Date(p.endDate).getTime() - new Date(p.startDate).getTime()) / 86400000) + 1} 日間)
+                    </span>
+                  )}
+                  {p.notes && <p className="text-xs text-gray-400 mt-0.5">{p.notes}</p>}
+                </div>
+                <button
+                  onClick={() => handlePeriodDelete(p.id)}
+                  className="text-gray-300 hover:text-red-400 text-xs ml-2 shrink-0"
+                >
+                  削除
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>
