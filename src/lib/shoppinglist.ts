@@ -63,8 +63,12 @@ async function fetchIngredientsFromAI(
   const prompt = `以下の料理それぞれについて、一般的な家庭料理レシピの材料リストをJSONで返してください。
 料理名: ${dishNames.join('、')}
 
+【重要】
+- name は食材名のみ（数値・単位を含めないこと）例: "鶏もも肉" ○  "鶏もも肉: 200" ✕
+- amount は数値と単位をセットで記載 例: "200g" "大さじ2" "1個" "適量"
+
 必ず以下のJSON形式のみで返答してください（コードブロック・説明文不要）:
-{"dishes":[{"name":"料理名","ingredients":[{"name":"食材名","amount":"量（例: 200g, 大さじ1, 1個）"}]}]}`
+{"dishes":[{"name":"料理名","ingredients":[{"name":"食材名","amount":"数値+単位（例: 200g, 大さじ1, 1個）"}]}]}`
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
   const res = await fetch(url, {
@@ -122,12 +126,39 @@ function mergeAmounts(amounts: string[]): string {
   return unique.join(' ＋ ')
 }
 
+// ── 食材名の正規化 ───────────────────────────────────────────
+// AIが "牛乳: 100" のように name に数量を混入させた場合を吸収する
+function normalizeIngredient(name: string, amount: string): { name: string; amount: string } {
+  // "牛乳: 100" + "ml"  →  name="牛乳", amount="100ml"
+  const colonNum = name.match(/^(.+?):\s*(\d[\d./]*)$/)
+  if (colonNum) {
+    return {
+      name:   colonNum[1].trim(),
+      amount: (colonNum[2] + amount.trim()).trim(),
+    }
+  }
+  // "牛乳 100" + "ml"  →  name="牛乳", amount="100ml"
+  const spaceNum = name.match(/^(.+?)\s+(\d[\d./]*)$/)
+  if (spaceNum && /^[a-zA-Zぁ-んァ-ン一-龥々]/.test(amount.trim())) {
+    return {
+      name:   spaceNum[1].trim(),
+      amount: (spaceNum[2] + amount.trim()).trim(),
+    }
+  }
+  return { name: name.trim(), amount: amount.trim() }
+}
+
 // ── 同カテゴリ内で同名食材をまとめる ─────────────────────────
 function mergeIngredients(ingredients: ShoppingIngredient[]): ShoppingIngredient[] {
-  // key = 食材名（カタカナ・ひらがな表記揺れを吸収する場合は正規化も可）
+  // まず名前を正規化してから key にする
+  const normalized = ingredients.map(item => {
+    const { name, amount } = normalizeIngredient(item.name, item.amount)
+    return { ...item, name, amount }
+  })
+
   const map = new Map<string, { amounts: string[]; fromRecipes: string[] }>()
-  for (const item of ingredients) {
-    const key  = item.name.trim()
+  for (const item of normalized) {
+    const key  = item.name
     const prev = map.get(key) ?? { amounts: [], fromRecipes: [] }
     prev.amounts.push(item.amount)
     if (!prev.fromRecipes.includes(item.fromRecipe)) prev.fromRecipes.push(item.fromRecipe)
@@ -135,8 +166,8 @@ function mergeIngredients(ingredients: ShoppingIngredient[]): ShoppingIngredient
   }
   return [...map.entries()].map(([name, { amounts, fromRecipes }]) => ({
     name,
-    amount:     mergeAmounts(amounts),
-    category:   ingredients.find(i => i.name.trim() === name)!.category,
+    amount:     mergeAmounts(amounts.filter(Boolean)),
+    category:   normalized.find(i => i.name === name)!.category,
     fromRecipe: fromRecipes.join('・'),
   }))
 }
