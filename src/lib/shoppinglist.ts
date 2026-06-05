@@ -115,23 +115,74 @@ function parseAmount(amount: string): { num: number; unit: string } | null {
   return { num, unit }
 }
 
-function mergeAmounts(amounts: string[]): string {
-  if (amounts.length === 1) return amounts[0]
+// 大さじ/小さじ → 小さじ換算 (大さじ1=小さじ3)
+// ml + 大さじ/小さじ → ml換算 (大さじ1=15ml, 小さじ1=5ml)
+const UNIT_TO_SMALL_SPOON: Record<string, number> = { '大さじ': 3, '小さじ': 1 }
+const UNIT_TO_ML: Record<string, number> = { '大さじ': 15, '小さじ': 5, 'ml': 1, 'cc': 1, '㎖': 1 }
+const SPOON_UNITS = new Set(['大さじ', '小さじ'])
+const ML_UNITS    = new Set(['ml', 'cc', '㎖', '大さじ', '小さじ'])
 
-  // 全て同じ単位で数値が取れる場合は合計
-  const parsed = amounts.map(parseAmount)
-  if (parsed.every(p => p !== null)) {
-    const units = [...new Set(parsed.map(p => p!.unit))]
-    if (units.length === 1) {
-      const total = parsed.reduce((s, p) => s + p!.num, 0)
-      const formatted = Number.isInteger(total) ? String(total) : String(Math.round(total * 10) / 10)
-      return formatted + units[0]
+function formatNum(n: number): string {
+  // 分数表現に変換 (12分の1単位で丸め)
+  const rounded = Math.round(n * 12) / 12
+  const intPart  = Math.floor(rounded)
+  const fracPart = rounded - intPart
+  const fracs: [number, string][] = [
+    [1/6,'1/6'], [1/4,'1/4'], [1/3,'1/3'], [1/2,'1/2'],
+    [2/3,'2/3'], [3/4,'3/4'],
+  ]
+  for (const [val, str] of fracs) {
+    if (Math.abs(fracPart - val) < 0.02) {
+      return intPart > 0 ? `${intPart}と${str}` : str
     }
   }
+  if (fracPart < 0.02) return String(intPart)
+  return String(Math.round(n * 10) / 10)
+}
 
-  // 単位が違う or 解析不能 → 重複を除いて「＋」で連結
-  const unique = [...new Set(amounts)]
-  return unique.join(' ＋ ')
+function mergeAmounts(amounts: string[]): string {
+  const deduped = [...new Set(amounts.map(a => a.trim()).filter(Boolean))]
+  if (deduped.length === 1) return deduped[0]
+
+  // 各amountをパース
+  const parsed = deduped.map(a => ({ raw: a, p: parseAmount(a) }))
+  const parseable   = parsed.filter(x => x.p !== null) as { raw: string; p: NonNullable<ReturnType<typeof parseAmount>> }[]
+  const unparseable = [...new Set(parsed.filter(x => x.p === null).map(x => x.raw))]
+
+  if (parseable.length === 0) return deduped.join(' ＋ ')
+
+  const units = new Set(parseable.map(x => x.p.unit))
+
+  // ① 同一単位 → そのまま合計
+  if (units.size === 1) {
+    const total = parseable.reduce((s, x) => s + x.p.num, 0)
+    const parts = [formatNum(total) + [...units][0], ...unparseable]
+    return parts.join(' ＋ ')
+  }
+
+  // ② 大さじ＋小さじ混在 → 小さじに統一して合計
+  const hasOnlySpoons = [...units].every(u => SPOON_UNITS.has(u))
+  if (hasOnlySpoons) {
+    const total = parseable.reduce((s, x) => s + x.p.num * (UNIT_TO_SMALL_SPOON[x.p.unit] ?? 1), 0)
+    const parts = [formatNum(total) + '小さじ', ...unparseable]
+    return parts.join(' ＋ ')
+  }
+
+  // ③ ml系（ml/cc/大さじ/小さじ）が混在 → mlに統一して合計
+  const allMlCompatible = [...units].every(u => ML_UNITS.has(u))
+  if (allMlCompatible) {
+    const total = parseable.reduce((s, x) => s + x.p.num * (UNIT_TO_ML[x.p.unit] ?? 1), 0)
+    const parts = [formatNum(total) + 'ml', ...unparseable]
+    return parts.join(' ＋ ')
+  }
+
+  // ④ 単位が異なる → ユニットごとに合計してから連結
+  const unitMap = new Map<string, number>()
+  for (const x of parseable) {
+    unitMap.set(x.p.unit, (unitMap.get(x.p.unit) ?? 0) + x.p.num)
+  }
+  const parts = [...unitMap.entries()].map(([u, n]) => formatNum(n) + u)
+  return [...parts, ...unparseable].join(' ＋ ')
 }
 
 // ── 食材名の正規化 ───────────────────────────────────────────
