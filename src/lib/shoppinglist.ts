@@ -261,10 +261,22 @@ function groupByCategory(ingredients: ShoppingIngredient[]): ShoppingCategoryGro
     }))
 }
 
+// ── 材料量をスケール ─────────────────────────────────────────
+function scaleAmount(amount: string, factor: number): string {
+  if (factor === 1 || !amount.trim()) return amount
+  const p = parseAmount(amount)
+  if (p) {
+    return formatNum(p.num * factor) + p.unit
+  }
+  // パース不能（少々・適量・1本 など）はそのまま + ×N 注記
+  return `${amount}（×${Math.round(factor * 10) / 10}）`
+}
+
 // ── メイン: 買い物リスト生成 ─────────────────────────────────
 export async function buildShoppingList(
   plan: WeeklyMealPlan,
-  recipes: Recipe[]
+  recipes: Recipe[],
+  servings = 1
 ): Promise<ShoppingListData> {
   const SKIP_WORDS = ['ご飯', 'ごはん', '白米', 'プロテイン', 'サプリ', '玄米']
 
@@ -280,11 +292,12 @@ export async function buildShoppingList(
 
     const recipe = matchToRecipe(dish.name, recipes)
     if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
-      // DBに材料登録あり → そのまま使用
+      // DBに材料登録あり → 人前数に合わせてスケール
+      const factor = servings / (recipe.servings || 1)
       for (const ing of recipe.ingredients) {
         dbIngredients.push({
           name: ing.name,
-          amount: ing.amount,
+          amount: scaleAmount(ing.amount, factor),
           category: classifyIngredient(ing.name),
           fromRecipe: dish.name,
         })

@@ -250,6 +250,7 @@ export default function ShoppingList() {
   const [hasPlan,    setHasPlan]    = useState(true)
   const [checked,    setChecked]    = useState<Set<string>>(loadChecked)
   const [popup,      setPopup]      = useState<ShoppingIngredient | null>(null)
+  const [servings,   setServings]   = useState(1)
 
   useEffect(() => { loadDB() }, [loadDB])
 
@@ -282,7 +283,7 @@ export default function ShoppingList() {
       }
       const plan = await loadSavedMealPlan()
       if (!plan) { setHasPlan(false); return }
-      const result = await buildShoppingList(plan, recipeDB.recipes)
+      const result = await buildShoppingList(plan, recipeDB.recipes, servings)
       setList(result)
       setChecked(new Set())
       saveChecked(new Set())
@@ -320,6 +321,23 @@ export default function ShoppingList() {
           </button>
         </div>
       )}
+
+      {/* 人前指定 */}
+      <div className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3">
+        <span className="text-sm text-gray-600 font-medium">何人前で作る？</span>
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={() => setServings(v => Math.max(1, v - 1))}
+            className="w-8 h-8 rounded-full border border-gray-200 bg-white text-gray-600 font-bold text-base flex items-center justify-center hover:bg-gray-100 transition"
+          >－</button>
+          <span className="w-8 text-center text-base font-bold text-gray-800">{servings}</span>
+          <button
+            onClick={() => setServings(v => v + 1)}
+            className="w-8 h-8 rounded-full border border-gray-200 bg-white text-gray-600 font-bold text-base flex items-center justify-center hover:bg-gray-100 transition"
+          >＋</button>
+          <span className="text-sm text-gray-500">人前</span>
+        </div>
+      </div>
 
       {/* 生成ボタン */}
       <button
