@@ -96,14 +96,18 @@ function IngredientRow({
         {formatAmount(item.amount)}
       </span>
 
-      {/* レシピ一覧ボタン */}
-      <button
-        onClick={onTap}
-        className="shrink-0 text-[10px] text-gray-400 hover:text-green-500 transition px-1"
-        title="使用レシピを見る"
-      >
-        ▶
-      </button>
+      {/* レシピ一覧ボタン（fromRecipeがある場合のみ） */}
+      {item.fromRecipe ? (
+        <button
+          onClick={onTap}
+          className="shrink-0 text-[10px] text-gray-400 hover:text-green-500 transition px-1"
+          title="使用レシピを見る"
+        >
+          ▶
+        </button>
+      ) : (
+        <span className="w-5 shrink-0" />
+      )}
     </li>
   )
 }
@@ -231,7 +235,7 @@ function ListSection({
 // ── メインページ ──────────────────────────────────────────────
 export default function ShoppingList() {
   const navigate = useNavigate()
-  const { db: recipeDB, loadDB } = useRecipeStore()
+  const { db: recipeDB, isLoading: recipeLoading, loadDB } = useRecipeStore()
 
   const [list,       setList]       = useState<ShoppingListData | null>(null)
   const [loading,    setLoading]    = useState(true)
@@ -262,6 +266,14 @@ export default function ShoppingList() {
     setError(null)
     setGenerating(true)
     try {
+      // レシピDBがまだロード中なら待つ
+      if (recipeLoading) {
+        await new Promise<void>(resolve => {
+          const unsub = useRecipeStore.subscribe(
+            s => { if (!s.isLoading) { unsub(); resolve() } }
+          )
+        })
+      }
       const plan = await loadSavedMealPlan()
       if (!plan) { setHasPlan(false); return }
       const result = await buildShoppingList(plan, recipeDB.recipes)

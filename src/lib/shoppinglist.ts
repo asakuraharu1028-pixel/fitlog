@@ -1,5 +1,4 @@
 import { loadFileFromDrive, saveFileToDrive } from './google'
-import { getApiKey } from './gemini'
 import type {
   WeeklyMealPlan,
   MealPlanDish,
@@ -44,56 +43,31 @@ function collectAllDishes(plan: WeeklyMealPlan): MealPlanDish[] {
 }
 
 // ── DBレシピとのマッチング ────────────────────────────────────
+// 括弧・空白・記号を除いた正規化名で比較
+function normalizeForMatch(name: string): string {
+  return name
+    .trim()
+    .replace(/[\s　]/g, '')                  // 空白除去
+    .replace(/[（(][^）)]*[）)]/g, '')        // 括弧と中身を除去: 「鶏もも肉（皮なし）」→「鶏もも肉」
+    .replace(/[・＆&～〜\-－]/g, '')           // 区切り記号除去
+}
+
 function matchToRecipe(dishName: string, recipes: Recipe[]): Recipe | null {
-  // 完全一致 → 部分一致の順で検索
+  const norm = normalizeForMatch(dishName)
   return (
+    // 1. 完全一致
     recipes.find(r => r.name === dishName) ??
-    recipes.find(r => dishName.includes(r.name) || r.name.includes(dishName)) ??
+    // 2. 正規化後完全一致
+    recipes.find(r => normalizeForMatch(r.name) === norm) ??
+    // 3. 正規化後部分一致（短い方が長い方に含まれる）
+    recipes.find(r => {
+      const rn = normalizeForMatch(r.name)
+      return norm.includes(rn) || rn.includes(norm)
+    }) ??
     null
   )
 }
 
-// ── Geminiで未登録料理の材料を取得 ───────────────────────────
-async function fetchIngredientsFromAI(
-  dishNames: string[]
-): Promise<Record<string, { name: string; amount: string }[]>> {
-  const apiKey = getApiKey()
-  if (!apiKey || dishNames.length === 0) return {}
-
-  const prompt = `以下の料理それぞれについて、一般的な家庭料理レシピの材料リストをJSONで返してください。
-料理名: ${dishNames.join('、')}
-
-【重要】
-- name は食材名のみ（数値・単位を含めないこと）例: "鶏もも肉" ○  "鶏もも肉: 200" ✕
-- amount は数値と単位をセットで記載 例: "200g" "大さじ2" "1個" "適量"
-
-必ず以下のJSON形式のみで返答してください（コードブロック・説明文不要）:
-{"dishes":[{"name":"料理名","ingredients":[{"name":"食材名","amount":"数値+単位（例: 200g, 大さじ1, 1個）"}]}]}`
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json' },
-    }),
-  })
-  if (!res.ok) throw new Error(`APIエラー ${res.status}`)
-  const data = await res.json()
-  const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-  const match = text.match(/\{[\s\S]*\}/)
-  if (!match) return {}
-
-  const parsed = JSON.parse(match[0]) as {
-    dishes: { name: string; ingredients: { name: string; amount: string }[] }[]
-  }
-  const result: Record<string, { name: string; amount: string }[]> = {}
-  for (const d of parsed.dishes) {
-    result[d.name] = d.ingredients
-  }
-  return result
-}
 
 // ── 数量の合算 ───────────────────────────────────────────────
 // "200g" → { num: 200, unit: "g" }  "大さじ1と1/3" → { num: 4/3, unit: "大さじ" }
@@ -275,18 +249,21 @@ export async function buildShoppingList(
   plan: WeeklyMealPlan,
   recipes: Recipe[]
 ): Promise<ShoppingListData> {
+  const SKIP_WORDS = ['ご飯', 'ごはん', '白米', 'プロテイン', 'サプリ', '玄米']
+
   const dishes = collectAllDishes(plan)
-  const dbIngredients: ShoppingIngredient[] = []
+  const dbIngredients:  ShoppingIngredient[] = []
   const otherDishNames: string[] = []
 
-  // DBマッチング
-  const seen = new Set<string>()  // 同名料理の重複処理
+  const seen = new Set<string>()
   for (const dish of dishes) {
     if (seen.has(dish.name)) continue
     seen.add(dish.name)
+    if (SKIP_WORDS.some(s => dish.name.includes(s))) continue
 
     const recipe = matchToRecipe(dish.name, recipes)
     if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
+      // DBに材料登録あり → そのまま使用
       for (const ing of recipe.ingredients) {
         dbIngredients.push({
           name: ing.name,
@@ -296,29 +273,18 @@ export async function buildShoppingList(
         })
       }
     } else {
-      // 主食・サプリなど材料不要なものはスキップ
-      const skip = ['ご飯', 'ごはん', '白米', 'プロテイン', 'サプリ']
-      if (!skip.some(s => dish.name.includes(s))) {
-        otherDishNames.push(dish.name)
-      }
+      // DB未登録（またはマッチしない） → その他へ
+      otherDishNames.push(dish.name)
     }
   }
 
-  // DB未登録料理の材料をAIで取得
-  const aiIngredients: ShoppingIngredient[] = []
-  if (otherDishNames.length > 0) {
-    const aiResult = await fetchIngredientsFromAI(otherDishNames)
-    for (const [dishName, ings] of Object.entries(aiResult)) {
-      for (const ing of ings) {
-        aiIngredients.push({
-          name: ing.name,
-          amount: ing.amount,
-          category: classifyIngredient(ing.name),
-          fromRecipe: dishName,
-        })
-      }
-    }
-  }
+  // DB未登録 = 素材そのもの（ごはん・バナナ・プロテイン等）→ そのまま食材として追加
+  const aiIngredients: ShoppingIngredient[] = otherDishNames.map(name => ({
+    name,
+    amount: '',
+    category: classifyIngredient(name),
+    fromRecipe: '',
+  }))
 
   const result: ShoppingListData = {
     dbList:    groupByCategory(dbIngredients),
