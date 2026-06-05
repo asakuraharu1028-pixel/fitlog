@@ -66,13 +66,11 @@ function RecipePopup({ ingredient, onClose }: { ingredient: ShoppingIngredient; 
 // ── 食材1行 ──────────────────────────────────────────────────
 function IngredientRow({
   item,
-  itemKey,
   checked,
   onToggle,
   onTap,
 }: {
   item: ShoppingIngredient
-  itemKey: string
   checked: boolean
   onToggle: () => void
   onTap: () => void
@@ -162,7 +160,6 @@ function CategorySection({
               <IngredientRow
                 key={key}
                 item={item}
-                itemKey={key}
                 checked={checked.has(key)}
                 onToggle={() => onToggle(key)}
                 onTap={() => onTapItem(item)}
