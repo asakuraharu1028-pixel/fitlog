@@ -11,10 +11,10 @@ function getSystemPrompt(data: AppData): string {
   return getCharacter(data.settings.advisorCharacter).systemPrompt
 }
 
-async function callAI(prompt: string, data: AppData): Promise<string> {
+async function callAI(prompt: string, data: AppData, systemPromptOverride?: string): Promise<string> {
   const apiKey = getApiKey()
   if (!apiKey) return ''
-  const systemPrompt = getSystemPrompt(data)
+  const systemPrompt = systemPromptOverride ?? getSystemPrompt(data)
 
   if (isOpenRouterKey(apiKey)) {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -146,7 +146,8 @@ ${registeredSummary}
 摂取済みPFC：P${totalProtein.toFixed(1)}g / F${totalFat.toFixed(1)}g / C${totalCarbs.toFixed(1)}g${weightLine ? `\n${weightLine}` : ''}
 残りの${unregistered.join('・')}について、カロリーと栄養バランスを考慮した具体的な献立を提案してください。各食事の食品名と目安量を簡潔に箇条書きで示してください。`
 
-  return callAI(prompt, data)
+  const suggestionSystemPrompt = `あなたは栄養士です。ユーザーの食事記録とカロリー・栄養バランスを元に、残りの食事の具体的な献立を提案します。アドバイスや感想は不要です。食事ごとに食品名と目安量（g）を箇条書きで簡潔に示してください。`
+  return callAI(prompt, data, suggestionSystemPrompt)
 }
 
 export async function getCardioAdvice(log: CardioLog, data: AppData): Promise<string> {
