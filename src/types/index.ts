@@ -91,6 +91,7 @@ export interface Recipe {
   protein: number
   fat: number
   carbs: number
+  sodium?: number             // 食塩相当量 g（1人前）
   ingredients?: RecipeIngredient[]  // 材料リスト
   note?: string
   sourceUrl?: string

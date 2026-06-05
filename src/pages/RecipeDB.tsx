@@ -15,7 +15,9 @@ function recipeToEntry(r: Recipe): AiFoodResult {
     protein: r.protein,
     fat: r.fat,
     carbs: r.carbs,
-    fiber: 0, vitA: 0, vitC: 0, vitD: 0, ca: 0, fe: 0, na: 0,
+    // 食塩相当量(g) → Na(mg)
+    na: r.sodium != null ? Math.round(r.sodium * 393) : 0,
+    fiber: 0, vitA: 0, vitC: 0, vitD: 0, ca: 0, fe: 0,
   }
 }
 
@@ -49,6 +51,7 @@ const EMPTY_FORM = {
   protein:          0,
   fat:              0,
   carbs:            0,
+  sodium:           0,   // 食塩相当量 g
   ingredientsText:  '',   // 材料入力テキスト（改行区切り）
   note:             '',
   sourceUrl:        '',
@@ -71,6 +74,7 @@ function toFormState(r: Recipe): FormState {
     protein:         r.protein,
     fat:             r.fat,
     carbs:           r.carbs,
+    sodium:          r.sodium ?? 0,
     ingredientsText: ingredientsToText(r.ingredients),
     note:            r.note ?? '',
     sourceUrl:       r.sourceUrl ?? '',
@@ -281,6 +285,7 @@ function RecipeFormModal({
               ['protein',  'タンパク質 (g)',  '20'],
               ['fat',      '脂質 (g)',        '10'],
               ['carbs',    '炭水化物 (g)',    '30'],
+              ['sodium',   '食塩相当量 (g)',  '1.5'],
             ] as [keyof FormState, string, string][]).map(([key, label, ph]) => (
               <div key={key}>
                 <label className="text-[10px] text-gray-400">{label}</label>
@@ -387,6 +392,9 @@ function RecipeCard({
             <span>P <b className="text-blue-500">{recipe.protein}g</b></span>
             <span>F <b className="text-yellow-500">{recipe.fat}g</b></span>
             <span>C <b className="text-orange-500">{recipe.carbs}g</b></span>
+            {recipe.sodium != null && recipe.sodium > 0 && (
+              <span>塩 <b className="text-gray-600">{recipe.sodium}g</b></span>
+            )}
             <span className="ml-auto text-gray-400">{recipe.servings}人前</span>
           </div>
 
@@ -396,9 +404,9 @@ function RecipeCard({
               <p className="text-[10px] font-semibold text-gray-400 mb-1">材料（{recipe.servings}人前）</p>
               <ul className="space-y-0.5">
                 {recipe.ingredients.map((ing, i) => (
-                  <li key={i} className="flex justify-between text-xs text-gray-500">
-                    <span>{ing.name}</span>
-                    <span className="text-gray-400">{ing.amount}</span>
+                  <li key={i} className="text-xs text-gray-500">
+                    {ing.name}
+                    {ing.amount && <span className="text-gray-400">：{ing.amount}</span>}
                   </li>
                 ))}
               </ul>
@@ -495,6 +503,7 @@ export default function RecipeDBPage() {
       protein:     f.protein,
       fat:         f.fat,
       carbs:       f.carbs,
+      sodium:      f.sodium > 0 ? f.sodium : undefined,
       ingredients: ingredients.length > 0 ? ingredients : undefined,
       note:        f.note.trim() || undefined,
       sourceUrl:   f.sourceUrl.trim() || undefined,
