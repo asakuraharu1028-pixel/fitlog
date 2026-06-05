@@ -24,7 +24,7 @@ function isOpenRouterKey(key: string) {
 const DAY_LABELS = ['1日目（月）', '2日目（火）', '3日目（水）', '4日目（木）', '5日目（金）', '6日目（土）', '7日目（日）']
 
 const CATEGORY_JP: Record<RecipeCategory, string> = {
-  main: '主菜', side: '副菜', soup: '汁物', staple: '主食', breakfast: '朝食向け', snack: '間食',
+  main: '主菜', side: '副菜', soup: '汁物', staple: '主食', breakfast: '朝食向け', snack: '間食', bento: '弁当',
 }
 
 function buildRecipeSection(recipes: Recipe[]): string {
