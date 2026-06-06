@@ -291,11 +291,13 @@ export async function buildShoppingList(
     dishCount.set(dish.name, (dishCount.get(dish.name) ?? 0) + 1)
   }
 
+  console.log('[ShoppingList] buildShoppingList called, servings=', servings, 'recipes=', recipes.length)
   for (const [dishName, count] of dishCount.entries()) {
     const recipe = matchToRecipe(dishName, recipes)
     if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
       // DBに材料登録あり → 人前数×出現回数でスケール
       const factor = (servings * count) / (recipe.servings || 1)
+      console.log(`[ShoppingList] dish="${dishName}" count=${count} recipe.servings=${recipe.servings} factor=${factor}`)
       for (const ing of recipe.ingredients) {
         dbIngredients.push({
           name: ing.name,
