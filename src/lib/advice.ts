@@ -83,7 +83,7 @@ export async function getMealAdvice(meal: MealLog, data: AppData): Promise<strin
   if (!apiKey) return ''
 
   const goal = data.settings.goalCalories ?? 2000
-  const { intake, burned, remaining } = todayCalorieSummary(data, goal)
+  const { intake, burned, remaining, steps } = todayCalorieSummary(data, goal)
   const todayLogs = data.mealLogs.filter(m => m.date === meal.date)
   const registeredTypes = todayLogs.map(m => m.mealType as MealTypeKey)
   const totalProtein = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.protein, 0)
