@@ -115,15 +115,15 @@ function formatNum(n: number): string {
 }
 
 function mergeAmounts(amounts: string[]): string {
-  const deduped = [...new Set(amounts.map(a => a.trim()).filter(Boolean))]
-  if (deduped.length === 1) return deduped[0]
+  const trimmed = amounts.map(a => a.trim()).filter(Boolean)
+  if (trimmed.length === 0) return ''
 
-  // 各amountをパース
-  const parsed = deduped.map(a => ({ raw: a, p: parseAmount(a) }))
+  // 各amountをパース（重複排除はしない：同じ量でも複数レシピ分を合算するため）
+  const parsed = trimmed.map(a => ({ raw: a, p: parseAmount(a) }))
   const parseable   = parsed.filter(x => x.p !== null) as { raw: string; p: NonNullable<ReturnType<typeof parseAmount>> }[]
   const unparseable = [...new Set(parsed.filter(x => x.p === null).map(x => x.raw))]
 
-  if (parseable.length === 0) return deduped.join(' ＋ ')
+  if (parseable.length === 0) return unparseable.join(' ＋ ')
 
   const units = new Set(parseable.map(x => x.p.unit))
 
