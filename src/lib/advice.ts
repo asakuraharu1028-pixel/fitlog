@@ -64,7 +64,12 @@ function todayCalorieSummary(data: AppData, goalCalories: number) {
     ...data.cardioLogs.filter(c => c.date === today).map(c => c.caloriesBurned),
     ...data.strengthLogs.filter(s => s.date === today).map(s => s.estimatedCalories ?? 0),
   ].reduce((a, b) => a + b, 0)
-  return { intake, burned, remaining: goalCalories - intake + burned }
+  const steps = (data.stepLogs ?? []).find(s => s.date === today)?.steps ?? 0
+  return { intake, burned, remaining: goalCalories - intake + burned, steps }
+}
+
+function stepsLine(steps: number) {
+  return steps > 0 ? `歩数: ${steps.toLocaleString()}歩` : ''
 }
 
 const MEAL_TYPE_LABEL: Record<string, string> = {
@@ -111,12 +116,13 @@ export async function getMealAdvice(meal: MealLog, data: AppData): Promise<strin
     ? `PFC目標レンジ: タンパク質${proteinLow}〜${proteinHigh}g / 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
     : `PFC目標レンジ: 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
 
+  const sl = stepsLine(steps)
   const prompt = `
 ${mealType}に「${mealNames}」を記録しました。
 今日の登録済み食事：
 ${registeredSummary}
 ${remainingMealsLine}
-今日の状況：摂取${intake}kcal / 目標${goal}kcal / 消費${burned}kcal / 残り${remaining}kcal
+今日の状況：摂取${intake}kcal / 目標${goal}kcal / 消費${burned}kcal / 残り${remaining}kcal${sl ? ` / ${sl}` : ''}
 今日のタンパク質合計：${totalProtein.toFixed(1)}g
 ${pfcTargetLine}
 この食事内容と今日の栄養バランスを踏まえ、次の食事や生活習慣についてアドバイスをしてください。`
@@ -130,7 +136,7 @@ export async function getMealSuggestion(data: AppData): Promise<string> {
 
   const today = localDateStr()
   const goal = data.settings.goalCalories ?? 2000
-  const { intake, burned, remaining } = todayCalorieSummary(data, goal)
+  const { intake, burned, remaining, steps: todaySteps } = todayCalorieSummary(data, goal)
   const todayLogs = data.mealLogs.filter(m => m.date === today)
   const registeredTypes = todayLogs.map(m => m.mealType as MealTypeKey)
 
@@ -159,11 +165,12 @@ export async function getMealSuggestion(data: AppData): Promise<string> {
     ? `\n【登録済みレシピDB（優先して使うこと）】\n${recipes.map(r => `・${r.name}（${r.calories}kcal, P:${r.protein}g F:${r.fat}g C:${r.carbs}g${r.sodium != null ? ` 塩:${r.sodium}g` : ''}）`).join('\n')}`
     : ''
 
+  const sl = stepsLine(todaySteps)
   const prompt = `
 今日の食事記録：
 ${registeredSummary}
 残りの未記録食事：${unregistered.join('・')}
-今日の状況：摂取済み${intake}kcal / 目標${goal}kcal / 消費${burned}kcal / 残り摂取可能${remaining}kcal
+今日の状況：摂取済み${intake}kcal / 目標${goal}kcal / 消費${burned}kcal / 残り摂取可能${remaining}kcal${sl ? ` / ${sl}` : ''}
 摂取済みPFC：P${totalProtein.toFixed(1)}g / F${totalFat.toFixed(1)}g / C${totalCarbs.toFixed(1)}g
 摂取済み塩分相当量：${totalSaltG.toFixed(1)}g（目標上限：男性7.5g・女性6.5g）${weightLine ? `\n${weightLine}` : ''}${recipeListLine}
 残りの${unregistered.join('・')}について、カロリーと栄養バランスを考慮した具体的な献立を提案してください。各食事の食品名と目安量を簡潔に箇条書きで示してください。`
@@ -177,12 +184,13 @@ export async function getCardioAdvice(log: CardioLog, data: AppData): Promise<st
   if (!apiKey) return ''
 
   const goal = data.settings.goalCalories ?? 2000
-  const { intake, burned } = todayCalorieSummary(data, goal)
+  const { intake, burned, steps } = todayCalorieSummary(data, goal)
   const weight = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight
+  const sl = stepsLine(steps)
 
   const prompt = `
 有酸素運動「${log.name}」を${log.durationMin}分行い、${log.caloriesBurned}kcal消費しました。
-今日の摂取：${intake}kcal / 消費合計：${burned}kcal${weight ? ` / 体重：${weight}kg` : ''}
+今日の摂取：${intake}kcal / 消費合計：${burned}kcal${sl ? ` / ${sl}` : ''}${weight ? ` / 体重：${weight}kg` : ''}
 この運動内容に対するアドバイスや、次回へのアドバイスをしてください。`
 
   return callAI(prompt, data)
@@ -215,7 +223,8 @@ function dayStats(data: AppData, date: string) {
   const burned   = data.cardioLogs.filter(c => c.date === date).reduce((s, c) => s + c.caloriesBurned, 0)
     + data.strengthLogs.filter(s => s.date === date).reduce((s, t) => s + (t.estimatedCalories ?? 0), 0)
   const sleep    = (data.sleepLogs ?? []).filter(s => s.date === date).reduce((s, r) => s + r.durationMin, 0)
-  return { calories, protein, fat, carbs, sodium, burned, sleep }
+  const steps    = (data.stepLogs ?? []).find(s => s.date === date)?.steps ?? 0
+  return { calories, protein, fat, carbs, sodium, burned, sleep, steps }
 }
 
 export async function getDailyAdvice(data: AppData): Promise<string> {
@@ -239,7 +248,7 @@ export async function getDailyAdvice(data: AppData): Promise<string> {
 PFC実績: タンパク質${s.protein.toFixed(1)}g / 脂質${s.fat.toFixed(1)}g / 炭水化物${s.carbs.toFixed(1)}g
 ${pfcTargetLine}
 塩分相当量: ${(s.sodium * 2.54 / 1000).toFixed(1)}g（目安: 男性7.5g未満、女性6.5g未満）
-消費カロリー: ${s.burned}kcal
+消費カロリー: ${s.burned}kcal${s.steps > 0 ? `\n歩数: ${s.steps.toLocaleString()}歩` : ''}
 睡眠: ${s.sleep > 0 ? `${Math.floor(s.sleep / 60)}時間${s.sleep % 60}分` : '未記録'}
 今日の改善点や明日への具体的なアドバイスを3点、箇条書きで短く教えてください。`
 
@@ -266,6 +275,7 @@ export async function getWeeklyAdvice(data: AppData): Promise<string> {
   const avgSodium  = avg(stats.map(s => s.sodium))
   const avgBurned  = avg(stats.map(s => s.burned))
   const avgSleep   = avg(stats.map(s => s.sleep).filter(s => s > 0))
+  const avgSteps   = avg(stats.map(s => s.steps).filter(s => s > 0))
   const exerciseDays = stats.filter(s => s.burned > 0).length
 
   const goal = data.settings.goalCalories ?? 2000
@@ -285,7 +295,7 @@ export async function getWeeklyAdvice(data: AppData): Promise<string> {
 平均PFC実績: タンパク質${avgProtein}g / 脂質${avgFat}g / 炭水化物${avgCarbs}g
 ${pfcTargetLine}
 平均塩分相当量: ${(avgSodium * 2.54 / 1000).toFixed(1)}g
-平均消費カロリー: ${avgBurned}kcal
+平均消費カロリー: ${avgBurned}kcal${avgSteps > 0 ? `\n1日平均歩数: ${avgSteps.toLocaleString()}歩` : ''}
 運動した日数: ${exerciseDays}/7日
 平均睡眠: ${avgSleep > 0 ? `${Math.floor(avgSleep / 60)}時間${avgSleep % 60}分` : '未記録'}
 1週間の傾向と来週への具体的な改善提案を3点、箇条書きで短く教えてください。`

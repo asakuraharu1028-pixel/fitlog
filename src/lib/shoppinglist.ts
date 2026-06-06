@@ -284,27 +284,29 @@ export async function buildShoppingList(
   const dbIngredients:  ShoppingIngredient[] = []
   const otherDishNames: string[] = []
 
-  const seen = new Set<string>()
+  // 同じ料理が何回出現したかカウント（重複×人数でスケール）
+  const dishCount = new Map<string, number>()
   for (const dish of dishes) {
-    if (seen.has(dish.name)) continue
-    seen.add(dish.name)
     if (SKIP_WORDS.some(s => dish.name.includes(s))) continue
+    dishCount.set(dish.name, (dishCount.get(dish.name) ?? 0) + 1)
+  }
 
-    const recipe = matchToRecipe(dish.name, recipes)
+  for (const [dishName, count] of dishCount.entries()) {
+    const recipe = matchToRecipe(dishName, recipes)
     if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
-      // DBに材料登録あり → 人前数に合わせてスケール
-      const factor = servings / (recipe.servings || 1)
+      // DBに材料登録あり → 人前数×出現回数でスケール
+      const factor = (servings * count) / (recipe.servings || 1)
       for (const ing of recipe.ingredients) {
         dbIngredients.push({
           name: ing.name,
           amount: scaleAmount(ing.amount, factor),
           category: classifyIngredient(ing.name),
-          fromRecipe: dish.name,
+          fromRecipe: dishName,
         })
       }
     } else {
       // DB未登録（またはマッチしない） → その他へ
-      otherDishNames.push(dish.name)
+      otherDishNames.push(dishName)
     }
   }
 
