@@ -40,6 +40,93 @@ function calcMacros(dishes: MealPlanDish[]) {
   )
 }
 
+type DishOccurrence = { dayLabel: string; meal: string }
+type DishSummaryItem = {
+  name: string
+  searchUrl?: string
+  count: number
+  occurrences: DishOccurrence[]
+}
+
+function buildCookingSummary(days: DayMealPlan[]): DishSummaryItem[] {
+  const map = new Map<string, DishSummaryItem>()
+
+  const add = (dish: MealPlanDish, dayLabel: string, meal: string) => {
+    if (!map.has(dish.name)) {
+      map.set(dish.name, { name: dish.name, searchUrl: dish.searchUrl, count: 0, occurrences: [] })
+    }
+    const item = map.get(dish.name)!
+    item.count++
+    item.occurrences.push({ dayLabel, meal })
+    if (!item.searchUrl && dish.searchUrl) item.searchUrl = dish.searchUrl
+  }
+
+  days.forEach(day => {
+    day.breakfast.forEach(d => add(d, day.dayLabel, '朝食'))
+    day.lunch.forEach(d => add(d, day.dayLabel, '昼食'))
+    add(day.dinner.main, day.dayLabel, '夕食・主菜')
+    add(day.dinner.staple, day.dayLabel, '夕食・主食')
+    day.dinner.sides.forEach(d => add(d, day.dayLabel, '夕食・副菜'))
+    if (day.dinner.soup) add(day.dinner.soup, day.dayLabel, '夕食・汁物')
+    day.snack?.forEach(d => add(d, day.dayLabel, '間食'))
+  })
+
+  return Array.from(map.values())
+    .sort((a, b) => b.count - a.count)
+}
+
+function CookingSummary({ days }: { days: DayMealPlan[] }) {
+  const [expandedName, setExpandedName] = useState<string | null>(null)
+  const items = buildCookingSummary(days)
+  if (items.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-700">まとめて作る料理</h3>
+        <p className="text-xs text-gray-400">複数日に登場する料理 — タップで使用日を確認</p>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {items.map(item => (
+          <div key={item.name}>
+            <button
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition text-left"
+              onClick={() => setExpandedName(expandedName === item.name ? null : item.name)}
+            >
+              <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{item.name}</span>
+              <div className="flex items-center gap-2 shrink-0 ml-2">
+                <span className="text-xs font-medium text-gray-500">{item.count}人前</span>
+                {item.searchUrl && (
+                  <a
+                    href={item.searchUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-600 transition"
+                    onClick={e => e.stopPropagation()}
+                    title="レシピを検索"
+                  >
+                    <ExternalLink size={12} />
+                  </a>
+                )}
+                {expandedName === item.name
+                  ? <ChevronUp size={14} className="text-gray-400" />
+                  : <ChevronDown size={14} className="text-gray-400" />}
+              </div>
+            </button>
+            {expandedName === item.name && (
+              <div className="px-4 pb-3 pt-1 bg-gray-50 space-y-0.5">
+                {item.occurrences.map((occ, i) => (
+                  <p key={i} className="text-xs text-gray-500">{occ.dayLabel}・{occ.meal}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function DishRow({ dish }: { dish: MealPlanDish }) {
   return (
     <div className="flex items-start justify-between py-1.5 border-b border-gray-50 last:border-0 gap-2">
@@ -370,6 +457,7 @@ export default function MealPlan() {
           {plan.days.map((day, i) => (
             <DayCard key={i} day={day} index={i} />
           ))}
+          <CookingSummary days={plan.days} />
           <p className="text-xs text-center text-gray-400 pb-2">
             <ExternalLink size={10} className="inline mr-1" />
             料理名横のアイコンから「おいしい健康」でレシピを検索できます
