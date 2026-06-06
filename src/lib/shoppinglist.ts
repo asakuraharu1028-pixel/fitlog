@@ -299,9 +299,11 @@ export async function buildShoppingList(
       const factor = (servings * count) / (recipe.servings || 1)
       console.log(`[ShoppingList] dish="${dishName}" count=${count} recipe.servings=${recipe.servings} factor=${factor}`)
       for (const ing of recipe.ingredients) {
+        const scaled = scaleAmount(ing.amount, factor)
+        if (ing.name.includes('ベーコン')) console.log(`[ShoppingList] ベーコン raw="${ing.amount}" factor=${factor} scaled="${scaled}"`)
         dbIngredients.push({
           name: ing.name,
-          amount: scaleAmount(ing.amount, factor),
+          amount: scaled,
           category: classifyIngredient(ing.name),
           fromRecipe: dishName,
         })
