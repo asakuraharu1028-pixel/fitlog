@@ -326,6 +326,8 @@ export async function buildShoppingList(
     generatedAt: new Date().toISOString(),
   }
 
+  const bacon = result.dbList.flatMap(g => g.items).find(i => i.name.includes('ベーコン'))
+  console.log('[ShoppingList] result ベーコン:', bacon)
   await saveFileToDrive(SHOPPING_FILE, result)
   return result
 }

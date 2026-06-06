@@ -284,6 +284,8 @@ export default function ShoppingList() {
       const plan = await loadSavedMealPlan()
       if (!plan) { setHasPlan(false); return }
       const result = await buildShoppingList(plan, recipeDB.recipes, servings)
+      const bacon2 = result.dbList.flatMap(g => g.items).find(i => i.name.includes('ベーコン'))
+      console.log('[ShoppingList] setList前 ベーコン:', bacon2, 'servings=', servings)
       setList(result)
       setChecked(new Set())
       saveChecked(new Set())
