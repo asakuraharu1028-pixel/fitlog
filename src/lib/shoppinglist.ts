@@ -298,9 +298,9 @@ export async function buildShoppingList(
       // DBに材料登録あり → 人前数×出現回数でスケール
       const factor = (servings * count) / (recipe.servings || 1)
       console.log(`[ShoppingList] dish="${dishName}" count=${count} recipe.servings=${recipe.servings} factor=${factor}`)
+      if (dishName.includes('ベーコン')) console.log(`[ShoppingList] recipe ingredients:`, recipe.ingredients.map(i => ({ name: i.name, amount: i.amount })))
       for (const ing of recipe.ingredients) {
         const scaled = scaleAmount(ing.amount, factor)
-        if (ing.name.includes('ベーコン')) console.log(`[ShoppingList] ベーコン raw="${ing.amount}" factor=${factor} scaled="${scaled}"`)
         dbIngredients.push({
           name: ing.name,
           amount: scaled,
@@ -321,6 +321,9 @@ export async function buildShoppingList(
     category: classifyIngredient(name),
     fromRecipe: '',
   }))
+
+  const rawBacon = dbIngredients.filter(i => i.name.includes('ベーコン') || i.fromRecipe.includes('ベーコン'))
+  console.log('[ShoppingList] dbIngredients ベーコン関連:', rawBacon)
 
   const result: ShoppingListData = {
     dbList:    groupByCategory(dbIngredients),
