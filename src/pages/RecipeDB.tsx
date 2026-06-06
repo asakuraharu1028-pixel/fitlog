@@ -502,10 +502,17 @@ export default function RecipeDBPage() {
       .filter(Boolean)
       .map(line => {
         // 最後の空白区切りトークンを量、それ以前を名前とみなす
+        // "15 g" のように数字と単位が分かれている場合は結合する
         const parts = line.split(/\s+/)
         if (parts.length === 1) return { name: parts[0], amount: '' }
-        const amount = parts[parts.length - 1]
-        const name   = parts.slice(0, -1).join(' ')
+        let amount = parts[parts.length - 1]
+        let nameEnd = parts.length - 1
+        // 末尾が単位のみ（数字なし）で、その前が数字の場合は結合
+        if (nameEnd >= 1 && /^[^\d]+$/.test(amount) && /^\d/.test(parts[nameEnd - 1])) {
+          amount = parts[nameEnd - 1] + amount
+          nameEnd -= 1
+        }
+        const name = parts.slice(0, nameEnd).join(' ')
         return { name, amount }
       })
 

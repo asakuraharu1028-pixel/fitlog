@@ -291,20 +291,20 @@ export async function buildShoppingList(
     dishCount.set(dish.name, (dishCount.get(dish.name) ?? 0) + 1)
   }
 
-  console.log('[ShoppingList] buildShoppingList called, servings=', servings, 'recipes=', recipes.length)
   for (const [dishName, count] of dishCount.entries()) {
     const recipe = matchToRecipe(dishName, recipes)
     if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
       // DBに材料登録あり → 人前数×出現回数でスケール
       const factor = (servings * count) / (recipe.servings || 1)
-      console.log(`[ShoppingList] dish="${dishName}" count=${count} recipe.servings=${recipe.servings} factor=${factor}`)
-      if (dishName.includes('ベーコン')) console.log(`[ShoppingList] recipe ingredients:`, recipe.ingredients.map(i => ({ name: i.name, amount: i.amount })))
       for (const ing of recipe.ingredients) {
-        const scaled = scaleAmount(ing.amount, factor)
+        // 正規化してからスケール（"名前: 数字" + "単位" のような保存形式に対応）
+        const { name: normName, amount: normAmount } = normalizeIngredient(ing.name, ing.amount)
+        if (!normName) continue
+        const scaled = scaleAmount(normAmount, factor)
         dbIngredients.push({
-          name: ing.name,
+          name: normName,
           amount: scaled,
-          category: classifyIngredient(ing.name),
+          category: classifyIngredient(normName),
           fromRecipe: dishName,
         })
       }
@@ -322,17 +322,12 @@ export async function buildShoppingList(
     fromRecipe: '',
   }))
 
-  const rawBacon = dbIngredients.filter(i => i.name.includes('ベーコン') || i.fromRecipe.includes('ベーコン'))
-  console.log('[ShoppingList] dbIngredients ベーコン関連:', rawBacon)
-
   const result: ShoppingListData = {
     dbList:    groupByCategory(dbIngredients),
     otherList: groupByCategory(aiIngredients),
     generatedAt: new Date().toISOString(),
   }
 
-  const bacon = result.dbList.flatMap(g => g.items).find(i => i.name.includes('ベーコン'))
-  console.log('[ShoppingList] result ベーコン:', bacon)
   await saveFileToDrive(SHOPPING_FILE, result)
   return result
 }
