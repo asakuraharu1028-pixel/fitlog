@@ -53,7 +53,7 @@ function buildCookingSummary(days: DayMealPlan[]): DishSummaryItem[] {
 
   const add = (dish: MealPlanDish, dayLabel: string, meal: string) => {
     if (!map.has(dish.name)) {
-      map.set(dish.name, { name: dish.name, searchUrl: dish.searchUrl, count: 0, occurrences: [] })
+      map.set(dish.name, { name: dish.name, searchUrl: dish.searchUrl ?? undefined, count: 0, occurrences: [] })
     }
     const item = map.get(dish.name)!
     item.count++
