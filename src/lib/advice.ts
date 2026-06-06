@@ -55,21 +55,30 @@ async function callAI(prompt: string, data: AppData, systemPromptOverride?: stri
   return (d.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
 }
 
+function stepsToCalories(steps: number, weightKg?: number): number {
+  return Math.round(steps * (weightKg ?? 70) * 0.0005)
+}
+
 function todayCalorieSummary(data: AppData, goalCalories: number) {
   const today = localDateStr()
   const intake = data.mealLogs
     .filter(m => m.date === today)
     .reduce((s, m) => s + m.entries.reduce((a, e) => a + e.calories, 0), 0)
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight
+  const steps = (data.stepLogs ?? []).find(s => s.date === today)?.steps ?? 0
+  const stepCalories = stepsToCalories(steps, weightKg)
   const burned = [
     ...data.cardioLogs.filter(c => c.date === today).map(c => c.caloriesBurned),
     ...data.strengthLogs.filter(s => s.date === today).map(s => s.estimatedCalories ?? 0),
+    stepCalories,
   ].reduce((a, b) => a + b, 0)
-  const steps = (data.stepLogs ?? []).find(s => s.date === today)?.steps ?? 0
-  return { intake, burned, remaining: goalCalories - intake + burned, steps }
+  return { intake, burned, remaining: goalCalories - intake + burned, steps, stepCalories }
 }
 
-function stepsLine(steps: number) {
-  return steps > 0 ? `歩数: ${steps.toLocaleString()}歩` : ''
+function stepsLine(steps: number, stepCalories?: number) {
+  if (steps <= 0) return ''
+  const calPart = stepCalories != null && stepCalories > 0 ? `（約${stepCalories}kcal消費）` : ''
+  return `歩数: ${steps.toLocaleString()}歩${calPart}`
 }
 
 const MEAL_TYPE_LABEL: Record<string, string> = {
@@ -83,7 +92,7 @@ export async function getMealAdvice(meal: MealLog, data: AppData): Promise<strin
   if (!apiKey) return ''
 
   const goal = data.settings.goalCalories ?? 2000
-  const { intake, burned, remaining, steps } = todayCalorieSummary(data, goal)
+  const { intake, burned, remaining, steps, stepCalories } = todayCalorieSummary(data, goal)
   const todayLogs = data.mealLogs.filter(m => m.date === meal.date)
   const registeredTypes = todayLogs.map(m => m.mealType as MealTypeKey)
   const totalProtein = todayLogs.flatMap(m => m.entries).reduce((s, e) => s + e.protein, 0)
@@ -116,7 +125,7 @@ export async function getMealAdvice(meal: MealLog, data: AppData): Promise<strin
     ? `PFC目標レンジ: タンパク質${proteinLow}〜${proteinHigh}g / 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
     : `PFC目標レンジ: 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
 
-  const sl = stepsLine(steps)
+  const sl = stepsLine(steps, stepCalories)
   const prompt = `
 ${mealType}に「${mealNames}」を記録しました。
 今日の登録済み食事：
@@ -136,7 +145,7 @@ export async function getMealSuggestion(data: AppData): Promise<string> {
 
   const today = localDateStr()
   const goal = data.settings.goalCalories ?? 2000
-  const { intake, burned, remaining, steps: todaySteps } = todayCalorieSummary(data, goal)
+  const { intake, burned, remaining, steps: todaySteps, stepCalories: todayStepCalories } = todayCalorieSummary(data, goal)
   const todayLogs = data.mealLogs.filter(m => m.date === today)
   const registeredTypes = todayLogs.map(m => m.mealType as MealTypeKey)
 
@@ -165,7 +174,7 @@ export async function getMealSuggestion(data: AppData): Promise<string> {
     ? `\n【登録済みレシピDB（優先して使うこと）】\n${recipes.map(r => `・${r.name}（${r.calories}kcal, P:${r.protein}g F:${r.fat}g C:${r.carbs}g${r.sodium != null ? ` 塩:${r.sodium}g` : ''}）`).join('\n')}`
     : ''
 
-  const sl = stepsLine(todaySteps)
+  const sl = stepsLine(todaySteps, todayStepCalories)
   const prompt = `
 今日の食事記録：
 ${registeredSummary}
@@ -184,9 +193,9 @@ export async function getCardioAdvice(log: CardioLog, data: AppData): Promise<st
   if (!apiKey) return ''
 
   const goal = data.settings.goalCalories ?? 2000
-  const { intake, burned, steps } = todayCalorieSummary(data, goal)
+  const { intake, burned, steps, stepCalories } = todayCalorieSummary(data, goal)
   const weight = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight
-  const sl = stepsLine(steps)
+  const sl = stepsLine(steps, stepCalories)
 
   const prompt = `
 有酸素運動「${log.name}」を${log.durationMin}分行い、${log.caloriesBurned}kcal消費しました。
@@ -220,10 +229,12 @@ function dayStats(data: AppData, date: string) {
   const fat      = entries.reduce((s, e) => s + e.fat, 0)
   const carbs    = entries.reduce((s, e) => s + e.carbs, 0)
   const sodium   = entries.reduce((s, e) => s + (e.sodium ?? 0), 0)
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight
+  const steps    = (data.stepLogs ?? []).find(s => s.date === date)?.steps ?? 0
   const burned   = data.cardioLogs.filter(c => c.date === date).reduce((s, c) => s + c.caloriesBurned, 0)
     + data.strengthLogs.filter(s => s.date === date).reduce((s, t) => s + (t.estimatedCalories ?? 0), 0)
+    + stepsToCalories(steps, weightKg)
   const sleep    = (data.sleepLogs ?? []).filter(s => s.date === date).reduce((s, r) => s + r.durationMin, 0)
-  const steps    = (data.stepLogs ?? []).find(s => s.date === date)?.steps ?? 0
   return { calories, protein, fat, carbs, sodium, burned, sleep, steps }
 }
 
