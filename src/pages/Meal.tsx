@@ -101,11 +101,11 @@ function parseTemplateCsv(text: string, shop?: string): TemplateFoodItem[] {
   })
 }
 
-function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, onDelete, onSave, onNewTemplate, onCsvImport, onClose }: {
+function TemplateMode({ templates, editingTemplate, newTemplate, onAddMultiple, onEdit, onDelete, onSave, onNewTemplate, onCsvImport, onClose }: {
   templates: TemplateFoodItem[]
   editingTemplate: TemplateFoodItem | null
   newTemplate: boolean
-  onAdd: (t: TemplateFoodItem) => void
+  onAddMultiple: (items: TemplateFoodItem[]) => void
   onEdit: (t: TemplateFoodItem) => void
   onDelete: (id: string) => void
   onSave: (t: TemplateFoodItem) => void
@@ -117,12 +117,22 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
   const [csvError, setCsvError] = useState<string | null>(null)
   const [shopFilter, setShopFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const shops = ['all', ...Array.from(new Set(templates.map(t => t.shop ?? '').filter(Boolean)))]
   const byShop = shopFilter === 'all' ? templates : templates.filter(t => (t.shop ?? '') === shopFilter)
   const filtered = searchQuery.trim()
     ? byShop.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()) || (t.shop ?? '').toLowerCase().includes(searchQuery.toLowerCase()))
     : byShop
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -216,21 +226,28 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
               onCancel={() => onEdit(t)}
             />
           ) : (
-            <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
-              <button
-                onClick={() => onAdd(t)}
-                className="flex-1 text-left"
-              >
+            <div
+              className={`flex items-center gap-2 rounded-xl px-3 py-2 cursor-pointer transition ${selectedIds.has(t.id) ? 'bg-amber-100 border border-amber-300' : 'bg-gray-50'}`}
+              onClick={() => toggleSelect(t.id)}
+            >
+              <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition ${selectedIds.has(t.id) ? 'bg-amber-500 border-amber-500' : 'border-gray-300'}`}>
+                {selectedIds.has(t.id) && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
+              <div className="flex-1 text-left">
                 <p className="text-sm font-medium text-gray-700">{t.name}</p>
                 <p className="text-xs text-gray-400">
                   {t.shop && <span className="text-amber-500 mr-1">[{t.shop}]</span>}
                   {t.grams > 0 ? `${t.grams}g｜` : ''}{t.calories}kcal P:{t.protein}g F:{t.fat}g C:{t.carbs}g
                 </p>
-              </button>
-              <button onClick={() => onEdit(t)} className="text-gray-300 hover:text-amber-400 shrink-0">
+              </div>
+              <button onClick={e => { e.stopPropagation(); onEdit(t) }} className="text-gray-300 hover:text-amber-400 shrink-0">
                 <Pencil size={14} />
               </button>
-              <button onClick={() => onDelete(t.id)} className="text-gray-300 hover:text-red-400 shrink-0">
+              <button onClick={e => { e.stopPropagation(); onDelete(t.id) }} className="text-gray-300 hover:text-red-400 shrink-0">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -254,8 +271,21 @@ function TemplateMode({ templates, editingTemplate, newTemplate, onAdd, onEdit, 
         </button>
       )}
 
-      {templates.length > 0 && (
-        <p className="text-xs text-center text-gray-400">タップして食事に追加</p>
+      {selectedIds.size > 0 && (
+        <button
+          onClick={() => {
+            const items = templates.filter(t => selectedIds.has(t.id))
+            onAddMultiple(items)
+          }}
+          className="w-full bg-amber-500 text-white rounded-xl py-3 text-sm font-semibold hover:bg-amber-600 transition flex items-center justify-center gap-2"
+        >
+          <Plus size={16} />
+          {selectedIds.size}品を追加
+        </button>
+      )}
+
+      {templates.length > 0 && selectedIds.size === 0 && (
+        <p className="text-xs text-center text-gray-400">タップして選択、複数選択可</p>
       )}
     </div>
   )
@@ -453,13 +483,19 @@ export default function Meal() {
     setEditingTemplate(null); setNewTemplate(false); setTemplateSearchQuery('')
   }
 
+  const templateToEntry = (t: TemplateFoodItem): AiFoodResult => ({
+    name: t.name, grams: t.grams, calories: t.calories,
+    protein: t.protein, fat: t.fat, carbs: t.carbs, na: t.sodium ?? 0,
+    fiber: 0, vitA: 0, vitC: 0, vitD: 0, ca: 0, fe: 0,
+  })
+
   const handleTemplateAdd = (t: TemplateFoodItem) => {
-    const entry: AiFoodResult = {
-      name: t.name, grams: t.grams, calories: t.calories,
-      protein: t.protein, fat: t.fat, carbs: t.carbs, na: t.sodium ?? 0,
-      fiber: 0, vitA: 0, vitC: 0, vitD: 0, ca: 0, fe: 0,
-    }
-    setResults(prev => [...(prev ?? []), entry])
+    setResults(prev => [...(prev ?? []), templateToEntry(t)])
+    setMode('idle')
+  }
+
+  const handleTemplateAddMultiple = (items: TemplateFoodItem[]) => {
+    setResults(prev => [...(prev ?? []), ...items.map(templateToEntry)])
     setMode('idle')
   }
 
@@ -836,7 +872,7 @@ export default function Meal() {
             templates={templateFoods}
             editingTemplate={editingTemplate}
             newTemplate={newTemplate}
-            onAdd={handleTemplateAdd}
+            onAddMultiple={handleTemplateAddMultiple}
             onEdit={setEditingTemplate}
             onDelete={handleTemplateDelete}
             onSave={handleTemplateSave}

@@ -357,20 +357,35 @@ function RecipeCard({
   onEdit,
   onDelete,
   onAddMeal,
+  selectable,
+  selected,
+  onToggleSelect,
 }: {
   recipe: Recipe
   onEdit: () => void
   onDelete: () => void
   onAddMeal: () => void
+  selectable?: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
 }) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div className={`bg-white rounded-2xl shadow-sm overflow-hidden ${selectable && selected ? 'ring-2 ring-green-400' : ''}`}>
       <button
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition text-left"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => selectable ? onToggleSelect?.() : setOpen(v => !v)}
       >
+        {selectable && (
+          <div className={`w-5 h-5 rounded-full border-2 shrink-0 mr-3 flex items-center justify-center transition ${selected ? 'bg-green-500 border-green-500' : 'border-gray-300'}`}>
+            {selected && (
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </div>
+        )}
         <div className="flex-1 min-w-0 mr-2">
           <div className="flex items-center gap-2 mb-0.5">
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${CATEGORY_COLORS[recipe.category]}`}>
@@ -384,11 +399,11 @@ function RecipeCard({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-sm font-bold text-green-600">{recipe.calories}kcal</span>
-          {open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+          {!selectable && (open ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />)}
         </div>
       </button>
 
-      {open && (
+      {!selectable && open && (
         <div className="border-t border-gray-100 px-4 py-3 space-y-3">
           {/* 栄養 */}
           <div className="flex gap-4 text-xs text-gray-500">
@@ -472,6 +487,16 @@ export default function RecipeDBPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState<Recipe | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   useEffect(() => {
     loadDB()
@@ -645,6 +670,10 @@ export default function RecipeDBPage() {
         </div>
       )}
 
+      {fromMealType && sortedFiltered.length > 0 && (
+        <p className="text-xs text-center text-gray-400">タップして選択、複数選択可</p>
+      )}
+
       <div className="space-y-3">
         {sortedFiltered.map(r => (
           <RecipeCard
@@ -653,9 +682,29 @@ export default function RecipeDBPage() {
             onEdit={() => handleEdit(r)}
             onDelete={() => handleDelete(r.id)}
             onAddMeal={() => navigate('/meal', { state: { pendingEntries: [recipeToEntry(r)], mealType: fromMealType } })}
+            selectable={!!fromMealType}
+            selected={selectedIds.has(r.id)}
+            onToggleSelect={() => toggleSelect(r.id)}
           />
         ))}
       </div>
+
+      {fromMealType && selectedIds.size > 0 && (
+        <div className="sticky bottom-4">
+          <button
+            onClick={() => {
+              const entries = db.recipes
+                .filter(r => selectedIds.has(r.id))
+                .map(recipeToEntry)
+              navigate('/meal', { state: { pendingEntries: entries, mealType: fromMealType } })
+            }}
+            className="w-full bg-green-500 text-white rounded-2xl py-3.5 font-bold flex items-center justify-center gap-2 shadow-lg hover:bg-green-600 transition active:scale-95"
+          >
+            <UtensilsCrossed size={18} />
+            {selectedIds.size}件を食事に追加
+          </button>
+        </div>
+      )}
 
       {/* フォームモーダル */}
       {showForm && (
