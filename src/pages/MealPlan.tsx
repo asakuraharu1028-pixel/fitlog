@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles, BookOpen, Plus, ShoppingCart } from 'lucide-react'
 import { useAppStore } from '../lib/store'
 import { getApiKey } from '../lib/gemini'
-import { generateWeeklyMealPlan, loadSavedMealPlan } from '../lib/mealplan'
+import { generateWeeklyMealPlan, loadSavedMealPlan, loadMealPlanHistory } from '../lib/mealplan'
 import type { BentoSettings, PFCTargets } from '../lib/mealplan'
 import { useRecipeStore } from '../lib/recipedb'
 import type { WeeklyMealPlan, DayMealPlan, MealPlanDish, DinnerPlan } from '../types'
@@ -278,13 +278,15 @@ export default function MealPlan() {
   useEffect(() => { loadDB() }, [loadDB])
 
   const [plan, setPlan] = useState<WeeklyMealPlan | null>(null)
+  const [history, setHistory] = useState<WeeklyMealPlan[]>([])
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [loadingPlan, setLoadingPlan] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // 弁当設定
-  const bentoDays = ['月', '火', '水', '木', '金', '土', '日']
-  const [bentoDayFlags, setBentoDayFlags] = useState<boolean[]>(Array(7).fill(false))
+  const bentoDays = ['月', '火', '水', '木', '金']
+  const [bentoDayFlags, setBentoDayFlags] = useState<boolean[]>(Array(5).fill(false))
   const [bentoRecipeId, setBentoRecipeId] = useState<string>('')
   const bentoRecipes = recipeDB.recipes.filter(r => r.category === 'bento')
   const selectedBentoRecipe = bentoRecipes.find(r => r.id === bentoRecipeId) ?? null
@@ -305,8 +307,11 @@ export default function MealPlan() {
   }
 
   useEffect(() => {
-    loadSavedMealPlan()
-      .then(saved => { if (saved) setPlan(saved) })
+    Promise.all([loadSavedMealPlan(), loadMealPlanHistory()])
+      .then(([saved, hist]) => {
+        if (saved) setPlan(saved)
+        setHistory(hist)
+      })
       .finally(() => setLoadingPlan(false))
   }, [])
 
@@ -320,6 +325,8 @@ export default function MealPlan() {
         : undefined
       const newPlan = await generateWeeklyMealPlan(goalCalories, recipeDB.recipes, bento, pfcTargets)
       setPlan(newPlan)
+      // 履歴を再ロード
+      loadMealPlanHistory().then(setHistory)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'エラーが発生しました')
     } finally {
@@ -442,7 +449,7 @@ export default function MealPlan() {
           ) : (
             <>
               <Sparkles size={18} />
-              {plan ? '献立を再生成する' : '1週間の献立を生成する'}
+              {plan ? '献立を再生成する' : '5日分の献立を生成する'}
             </>
           )}
         </button>
@@ -464,7 +471,7 @@ export default function MealPlan() {
       {plan && !generating && !loadingPlan && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-600">7日間の献立</h2>
+            <h2 className="text-sm font-semibold text-gray-600">5日間の献立</h2>
             <p className="text-xs text-gray-400">目標 {plan.goalCalories}kcal 基準</p>
           </div>
           {plan.days.map((day, i) => (
@@ -482,8 +489,41 @@ export default function MealPlan() {
       {!plan && !generating && !loadingPlan && hasApiKey && (
         <div className="text-center py-12 text-gray-400">
           <p className="text-4xl mb-3">🍱</p>
-          <p className="text-sm">上のボタンで1週間分の献立を</p>
+          <p className="text-sm">上のボタンで5日分の献立を</p>
           <p className="text-sm">AIが自動生成します</p>
+        </div>
+      )}
+
+      {/* 過去ログ */}
+      {history.length > 0 && !generating && !loadingPlan && (
+        <div className="space-y-2 pt-2 border-t border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-500">過去の献立ログ</h2>
+          {history.map(h => (
+            <div key={h.id} className="bg-gray-50 rounded-2xl overflow-hidden">
+              <button
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-100 transition text-left"
+                onClick={() => setExpandedHistoryId(expandedHistoryId === h.id ? null : h.id)}
+              >
+                <div>
+                  <p className="text-sm font-medium text-gray-700">
+                    {new Date(h.createdAt).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' })}
+                    　{new Date(h.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  <p className="text-xs text-gray-400">目標 {h.goalCalories}kcal・{h.days.length}日分</p>
+                </div>
+                {expandedHistoryId === h.id
+                  ? <ChevronUp size={16} className="text-gray-400" />
+                  : <ChevronDown size={16} className="text-gray-400" />}
+              </button>
+              {expandedHistoryId === h.id && (
+                <div className="px-2 pb-3 space-y-2">
+                  {h.days.map((day, i) => (
+                    <DayCard key={i} day={day} index={i} />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

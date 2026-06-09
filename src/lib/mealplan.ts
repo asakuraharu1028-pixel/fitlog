@@ -4,6 +4,8 @@ import type { WeeklyMealPlan, DayMealPlan, Recipe, RecipeCategory } from '../typ
 import { nanoid } from 'nanoid'
 
 const MEALPLAN_FILE = 'mealplan.json'
+const MEALPLAN_HISTORY_FILE = 'mealplan_history.json'
+const HISTORY_MAX = 10
 
 export async function loadSavedMealPlan(): Promise<WeeklyMealPlan | null> {
   try {
@@ -17,11 +19,25 @@ export async function saveMealPlan(plan: WeeklyMealPlan): Promise<void> {
   await saveFileToDrive(MEALPLAN_FILE, plan)
 }
 
+export async function loadMealPlanHistory(): Promise<WeeklyMealPlan[]> {
+  try {
+    return (await loadFileFromDrive<WeeklyMealPlan[]>(MEALPLAN_HISTORY_FILE)) ?? []
+  } catch {
+    return []
+  }
+}
+
+async function appendToHistory(plan: WeeklyMealPlan): Promise<void> {
+  const history = await loadMealPlanHistory()
+  const updated = [plan, ...history].slice(0, HISTORY_MAX)
+  await saveFileToDrive(MEALPLAN_HISTORY_FILE, updated)
+}
+
 function isOpenRouterKey(key: string) {
   return key.startsWith('sk-or-')
 }
 
-const DAY_LABELS = ['1日目（月）', '2日目（火）', '3日目（水）', '4日目（木）', '5日目（金）', '6日目（土）', '7日目（日）']
+const DAY_LABELS = ['1日目（月）', '2日目（火）', '3日目（水）', '4日目（木）', '5日目（金）']
 
 const CATEGORY_JP: Record<RecipeCategory, string> = {
   main: '主菜', side: '副菜', soup: '汁物', staple: '主食', breakfast: '朝食向け', snack: '間食', bento: '弁当',
@@ -81,7 +97,7 @@ function buildBentoSection(settings: BentoSettings): string {
   } else {
     lines.push(`- ${targetDays} の昼食は弁当とする（弁当らしい献立をAIが提案）`)
   }
-  lines.push('- 弁当指定日は7日間すべて同じ弁当内容にする')
+  lines.push('- 弁当指定日は5日間すべて同じ弁当内容にする')
   lines.push('- 弁当以外の曜日の昼食は通常通り提案する')
   return lines.join('\n')
 }
@@ -92,7 +108,7 @@ function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSetti
   const dinnerCal   = Math.round(goalCalories * 0.35)
   const snackCal    = Math.round(goalCalories * 0.15)
 
-  return `あなたは管理栄養士です。目標摂取カロリー ${goalCalories}kcal/日 に合わせた7日間の献立を作成してください。
+  return `あなたは管理栄養士です。目標摂取カロリー ${goalCalories}kcal/日 に合わせた5日間の献立を作成してください。
 
 【条件】
 - 食事スタイル: 日本人の一般的な家庭料理
@@ -102,12 +118,12 @@ function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSetti
 - レシピURLはDBの各レシピに url: で記載されている場合はその値をそのまま使用。url: がない場合は https://oishi-kenko.com/recipes?q=料理名 の形式で記載
 - 栄養バランス: タンパク質 ${pfc ? `${pfc.proteinLow}〜${pfc.proteinHigh}g` : `${Math.round(goalCalories * 0.15 / 4)}〜${Math.round(goalCalories * 0.20 / 4)}g`}／日、脂質 ${pfc ? `${pfc.fatLow}〜${pfc.fatHigh}g` : `${Math.round(goalCalories * 0.20 / 9)}〜${Math.round(goalCalories * 0.25 / 9)}g`}／日、炭水化物 ${pfc ? `${pfc.carbsLow}〜${pfc.carbsHigh}g` : `${Math.round(goalCalories * 0.55 / 4)}〜${Math.round(goalCalories * 0.65 / 4)}g`}／日 を目安にする
 - 食塩相当量は1日6.5g未満を目安にする（汁物・漬物・加工食品の塩分に注意）
-- 朝食と昼食は7日間で2～3パターンに絞り、同じ献立を繰り返してよい（毎日違う食事にしない）
-- 夕食の主菜・副菜は週3～4種類に絞り、複数日で同じレシピを繰り返す
-- 買い物リストの食材総数が70品目以内に収まるよう食材の使い回しを最優先で意識する（同じ食材を複数料理に活用する）${buildRecipeSection(recipes)}${bento ? buildBentoSection(bento) : ''}
+- 朝食と昼食は5日間で2～3パターンに絞り、同じ献立を繰り返してよい（毎日違う食事にしない）
+- 夕食の主菜・副菜は3～4種類に絞り、複数日で同じレシピを繰り返す
+- 買い物リストの食材総数が50品目以内に収まるよう食材の使い回しを最優先で意識する（同じ食材を複数料理に活用する）${buildRecipeSection(recipes)}${bento ? buildBentoSection(bento) : ''}
 
 必ず以下のJSON形式のみで返答してください（コードブロック・説明文不要）:
-{"days":[{"dayLabel":"1日目（月）","totalCalories":${goalCalories},"breakfast":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"lunch":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"dinner":{"main":{"name":"主菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"},"staple":{"name":"主食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null},"sides":[{"name":"副菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"soup":{"name":"汁物名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}},"snack":[{"name":"間食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"note":"補足 or null"}]},...7日分]}
+{"days":[{"dayLabel":"1日目（月）","totalCalories":${goalCalories},"breakfast":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"lunch":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"dinner":{"main":{"name":"主菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"},"staple":{"name":"主食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null},"sides":[{"name":"副菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"soup":{"name":"汁物名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}},"snack":[{"name":"間食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"note":"補足 or null"}]},...5日分]}
 sodiumは食塩相当量（g）で記載すること。
 dayLabelは${DAY_LABELS.map((l, i) => `${i + 1}日目は"${l}"`).join('、')}とする。`
 }
@@ -176,6 +192,10 @@ export async function generateWeeklyMealPlan(
     : await callGemini(apiKey, prompt)
 
   if (!Array.isArray(days) || days.length === 0) throw new Error('献立データを取得できませんでした')
+
+  // 既存プランを履歴に退避してから新プランを保存
+  const existing = await loadSavedMealPlan()
+  if (existing) await appendToHistory(existing)
 
   const plan: WeeklyMealPlan = {
     id: nanoid(),
