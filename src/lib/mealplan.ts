@@ -102,7 +102,7 @@ function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSetti
 - レシピURLはDBの各レシピに url: で記載されている場合はその値をそのまま使用。url: がない場合は https://oishi-kenko.com/recipes?q=料理名 の形式で記載
 - 栄養バランス: タンパク質 ${pfc ? `${pfc.proteinLow}〜${pfc.proteinHigh}g` : `${Math.round(goalCalories * 0.15 / 4)}〜${Math.round(goalCalories * 0.20 / 4)}g`}／日、脂質 ${pfc ? `${pfc.fatLow}〜${pfc.fatHigh}g` : `${Math.round(goalCalories * 0.20 / 9)}〜${Math.round(goalCalories * 0.25 / 9)}g`}／日、炭水化物 ${pfc ? `${pfc.carbsLow}〜${pfc.carbsHigh}g` : `${Math.round(goalCalories * 0.55 / 4)}〜${Math.round(goalCalories * 0.65 / 4)}g`}／日 を目安にする
 - 食塩相当量は1日6.5g未満を目安にする（汁物・漬物・加工食品の塩分に注意）
-- 朝食は7日間で2～3パターンに絞り、同じ献立を繰り返してよい（毎日違う朝食にしない）
+- 朝食と昼食は7日間で2～3パターンに絞り、同じ献立を繰り返してよい（毎日違う食事にしない）
 - 夕食の主菜・副菜は週3～4種類に絞り、複数日で同じレシピを繰り返す
 - 買い物リストの食材総数が70品目以内に収まるよう食材の使い回しを最優先で意識する（同じ食材を複数料理に活用する）${buildRecipeSection(recipes)}${bento ? buildBentoSection(bento) : ''}
 
