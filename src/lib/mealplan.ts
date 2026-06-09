@@ -55,6 +55,15 @@ export interface BentoSettings {
   recipe: Recipe | null
 }
 
+export interface PFCTargets {
+  proteinLow: number
+  proteinHigh: number
+  fatLow: number
+  fatHigh: number
+  carbsLow: number
+  carbsHigh: number
+}
+
 function buildBentoSection(settings: BentoSettings): string {
   if (settings.days.length === 0) return ''
 
@@ -77,7 +86,7 @@ function buildBentoSection(settings: BentoSettings): string {
   return lines.join('\n')
 }
 
-function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSettings): string {
+function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSettings, pfc?: PFCTargets): string {
   const breakfastCal = Math.round(goalCalories * 0.27)
   const lunchCal    = Math.round(goalCalories * 0.23)
   const dinnerCal   = Math.round(goalCalories * 0.35)
@@ -91,7 +100,7 @@ function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSetti
 - プロテインサプリメントは1日最大30gまで（間食に組み込み可）
 - 夕食の構成: 主菜・主食・副菜(1〜2種)・汁物（省略・変更も可）
 - レシピURLはDBの各レシピに url: で記載されている場合はその値をそのまま使用。url: がない場合は https://oishi-kenko.com/recipes?q=料理名 の形式で記載
-- 栄養バランス（P:F:C = 15-20% : 20-25% : 55-65%）を意識する
+- 栄養バランス: タンパク質 ${pfc ? `${pfc.proteinLow}〜${pfc.proteinHigh}g` : `${Math.round(goalCalories * 0.15 / 4)}〜${Math.round(goalCalories * 0.20 / 4)}g`}／日、脂質 ${pfc ? `${pfc.fatLow}〜${pfc.fatHigh}g` : `${Math.round(goalCalories * 0.20 / 9)}〜${Math.round(goalCalories * 0.25 / 9)}g`}／日、炭水化物 ${pfc ? `${pfc.carbsLow}〜${pfc.carbsHigh}g` : `${Math.round(goalCalories * 0.55 / 4)}〜${Math.round(goalCalories * 0.65 / 4)}g`}／日 を目安にする
 - 食塩相当量は1日6.5g未満を目安にする（汁物・漬物・加工食品の塩分に注意）
 - 朝食は7日間で2～3パターンに絞り、同じ献立を繰り返してよい（毎日違う朝食にしない）
 - 夕食の主菜・副菜は週3～4種類に絞り、複数日で同じレシピを繰り返す
@@ -155,12 +164,13 @@ async function callOpenRouter(apiKey: string, prompt: string): Promise<DayMealPl
 export async function generateWeeklyMealPlan(
   goalCalories: number,
   recipes: Recipe[] = [],
-  bento?: BentoSettings
+  bento?: BentoSettings,
+  pfc?: PFCTargets
 ): Promise<WeeklyMealPlan> {
   const apiKey = getApiKey()
   if (!apiKey) throw new Error('APIキーが設定されていません')
 
-  const prompt = buildPrompt(goalCalories, recipes, bento)
+  const prompt = buildPrompt(goalCalories, recipes, bento, pfc)
   const days = isOpenRouterKey(apiKey)
     ? await callOpenRouter(apiKey, prompt)
     : await callGemini(apiKey, prompt)

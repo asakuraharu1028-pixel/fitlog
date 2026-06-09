@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles, B
 import { useAppStore } from '../lib/store'
 import { getApiKey } from '../lib/gemini'
 import { generateWeeklyMealPlan, loadSavedMealPlan } from '../lib/mealplan'
-import type { BentoSettings } from '../lib/mealplan'
+import type { BentoSettings, PFCTargets } from '../lib/mealplan'
 import { useRecipeStore } from '../lib/recipedb'
 import type { WeeklyMealPlan, DayMealPlan, MealPlanDish, DinnerPlan } from '../types'
 import type { AiFoodResult } from '../lib/gemini'
@@ -290,6 +290,15 @@ export default function MealPlan() {
   const selectedBentoRecipe = bentoRecipes.find(r => r.id === bentoRecipeId) ?? null
 
   const goalCalories = data.settings.goalCalories ?? 2000
+  const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight ?? 60
+  const pfcTargets: PFCTargets = {
+    proteinLow:  Math.round(weightKg * 1.6),
+    proteinHigh: Math.round(weightKg * 2.0),
+    fatLow:      Math.round(goalCalories * 0.20 / 9),
+    fatHigh:     Math.round(goalCalories * 0.30 / 9),
+    carbsLow:    Math.round(goalCalories * 0.50 / 4),
+    carbsHigh:   Math.round(goalCalories * 0.60 / 4),
+  }
 
   useEffect(() => {
     loadSavedMealPlan()
@@ -305,7 +314,7 @@ export default function MealPlan() {
       const bento: BentoSettings | undefined = selectedDays.length > 0
         ? { days: selectedDays, recipe: selectedBentoRecipe }
         : undefined
-      const newPlan = await generateWeeklyMealPlan(goalCalories, recipeDB.recipes, bento)
+      const newPlan = await generateWeeklyMealPlan(goalCalories, recipeDB.recipes, bento, pfcTargets)
       setPlan(newPlan)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'エラーが発生しました')
