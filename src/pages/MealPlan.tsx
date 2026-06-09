@@ -291,13 +291,17 @@ export default function MealPlan() {
 
   const goalCalories = data.settings.goalCalories ?? 2000
   const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight ?? 60
+  const _pProteinLow  = Math.round(weightKg * 1.6)
+  const _pProteinHigh = Math.round(weightKg * 2.0)
+  const _pFatLow      = Math.round(goalCalories * 0.20 / 9)
+  const _pFatHigh     = Math.round(goalCalories * 0.30 / 9)
   const pfcTargets: PFCTargets = {
-    proteinLow:  Math.round(weightKg * 1.6),
-    proteinHigh: Math.round(weightKg * 2.0),
-    fatLow:      Math.round(goalCalories * 0.20 / 9),
-    fatHigh:     Math.round(goalCalories * 0.30 / 9),
-    carbsLow:    Math.round(goalCalories * 0.50 / 4),
-    carbsHigh:   Math.round(goalCalories * 0.60 / 4),
+    proteinLow:  _pProteinLow,
+    proteinHigh: _pProteinHigh,
+    fatLow:      _pFatLow,
+    fatHigh:     _pFatHigh,
+    carbsLow:    Math.round(Math.max(0, goalCalories - _pProteinHigh * 4 - _pFatHigh * 9) / 4),
+    carbsHigh:   Math.round(Math.max(0, goalCalories - _pProteinLow  * 4 - _pFatLow  * 9) / 4),
   }
 
   useEffect(() => {

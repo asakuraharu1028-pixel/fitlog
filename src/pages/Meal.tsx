@@ -415,13 +415,16 @@ export default function Meal() {
   const goalCal = data.settings.goalCalories ?? 2000
   const weightKg = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight ?? 60
 
-  // PFC 目標レンジ（理想〜想定）
+  // PFC 目標レンジ（合計が目標カロリーと一致するよう逆算）
+  // タンパク質: 体重ベース
   const goalProteinLow  = Math.round(weightKg * 1.6)
   const goalProteinHigh = Math.round(weightKg * 2.0)
+  // 脂質: 目標カロリーの20〜30%
   const goalFatLow      = Math.round(goalCal * 0.20 / 9)
   const goalFatHigh     = Math.round(goalCal * 0.30 / 9)
-  const goalCarbsLow    = Math.round(goalCal * 0.50 / 4)
-  const goalCarbsHigh   = Math.round(goalCal * 0.60 / 4)
+  // 炭水化物: 残りカロリーから逆算（P高+F高 → C低、P低+F低 → C高）
+  const goalCarbsLow    = Math.round(Math.max(0, goalCal - goalProteinHigh * 4 - goalFatHigh * 9) / 4)
+  const goalCarbsHigh   = Math.round(Math.max(0, goalCal - goalProteinLow  * 4 - goalFatLow  * 9) / 4)
 
   // 画像選択（ネイティブカメラ）
   const handleImageCapture = async () => {
