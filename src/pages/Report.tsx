@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '../lib/store'
-import { localDateStr } from '../lib/utils'
+import { localDateStr, sleepWakeDate } from '../lib/utils'
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
@@ -83,7 +83,7 @@ export default function Report() {
 
   // 睡眠グラフデータ（分 → 時間）
   const sleepChartData = dates.map((date) => {
-    const logs = (data.sleepLogs ?? []).filter((s) => s.date === date)
+    const logs = (data.sleepLogs ?? []).filter((s) => sleepWakeDate(s) === date)
     const totalMin = logs.reduce((s, r) => s + r.durationMin, 0)
     return {
       date: shortDate(date, period),

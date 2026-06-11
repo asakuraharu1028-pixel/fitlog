@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { AppData } from '../types'
 import { loadFromDrive, saveToDrive } from './google'
 import { localDateStr } from './utils'
+import { syncWidgetData } from './widget'
 
 /**
  * UTC日付で保存されてしまったレコードを修正するマイグレーション。
@@ -92,6 +93,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setAuthenticated: (v) => set({ isAuthenticated: v }),
 
   loadData: async () => {
+    // ローカルデータを即時ウィジェットに反映（オフライン時も表示される）
+    const local = loadFromLocal()
+    if (local) syncWidgetData(local)
+
     set({ isLoading: true, driveError: null })
     try {
       const remote = await loadFromDrive<AppData>()
@@ -99,6 +104,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const merged = migrateUtcDates({ ...DEFAULT_DATA, ...remote })
         set({ data: merged })
         saveToLocal(merged)
+        syncWidgetData(merged)
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -115,6 +121,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const next = { ...get().data, ...patch }
     set({ data: next, isSaving: true, driveError: null })
     saveToLocal(next)
+    syncWidgetData(next)
     try {
       await saveToDrive(next)
     } catch (e) {

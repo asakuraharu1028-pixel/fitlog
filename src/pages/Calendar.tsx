@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Moon, Sparkles } from 'lucide-react'
 import { useAppStore } from '../lib/store'
+import { sleepWakeDate } from '../lib/utils'
 import type { MealLog } from '../types'
 
 const MEAL_LABELS: Record<string, string> = {
@@ -56,7 +57,7 @@ export default function Calendar() {
     ...data.strengthLogs.map(s => s.date),
     ...(data.stepLogs ?? []).map(l => l.date),
   ])
-  const sleepDates  = new Set((data.sleepLogs ?? []).map(s => s.date))
+  const sleepDates  = new Set((data.sleepLogs ?? []).map(s => sleepWakeDate(s)))
   const adviceDates = new Set((data.adviceLogs ?? []).map(a => a.date))
 
   const dotsFor = (dateStr: string): DayDots => ({
@@ -76,7 +77,7 @@ export default function Calendar() {
   const selCardio   = selected ? data.cardioLogs.filter(c => c.date === selected) : []
   const selStrength = selected ? data.strengthLogs.filter(s => s.date === selected) : []
   const selSteps    = selected ? (data.stepLogs ?? []).find(l => l.date === selected) : null
-  const selSleep    = selected ? (data.sleepLogs ?? []).filter(s => s.date === selected) : []
+  const selSleep    = selected ? (data.sleepLogs ?? []).filter(s => sleepWakeDate(s) === selected) : []
   const selAdvice   = selected ? (data.adviceLogs ?? []).find(a => a.date === selected) : null
 
   const totalCal = selMeals.reduce((s, m: MealLog) => s + m.entries.reduce((ss, e) => ss + e.calories, 0), 0)

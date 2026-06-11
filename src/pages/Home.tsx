@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { localDateStr } from '../lib/utils'
+import { localDateStr, sleepWakeDate } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
 import { getApiKey } from '../lib/gemini'
@@ -29,7 +29,7 @@ export default function Home() {
   const todayMeals    = data.mealLogs.filter((m) => m.date === today)
   const todayCardio   = data.cardioLogs.filter((c) => c.date === today)
   const todayStrength = data.strengthLogs.filter((s) => s.date === today)
-  const todaySleep    = (data.sleepLogs ?? []).filter((s) => s.date === today)
+  const todaySleep    = (data.sleepLogs ?? []).filter((s) => sleepWakeDate(s) === today)
   // 歩数：今日のデータがなければ最新日のデータを表示
   const sortedStepLogs = (data.stepLogs ?? []).slice().sort((a, b) => b.date.localeCompare(a.date))
   const latestStepLog  = sortedStepLogs[0]
