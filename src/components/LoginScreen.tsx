@@ -20,7 +20,8 @@ export default function LoginScreen({ sdkReady }: Props) {
       setAuthenticated(true)
       await loadData()
     } catch (e) {
-      setError('ログインに失敗しました。もう一度お試しください。')
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(`ログインに失敗しました: ${msg}`)
       console.error(e)
     } finally {
       setLoading(false)
