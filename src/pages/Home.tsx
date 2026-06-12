@@ -64,13 +64,13 @@ export default function Home() {
   const goal      = data.settings.goalCalories ?? 2000
   const remaining = goal - totalCaloriesIn + totalCaloriesOut
 
-  // PFC 目標レンジ（理想〜想定）
+  // PFC 目標レンジ（合計が目標カロリーと一致するよう逆算）
   const goalProteinLow  = Math.round(weightKg * 1.6)
   const goalProteinHigh = Math.round(weightKg * 2.0)
   const goalFatLow      = Math.round(goal * 0.20 / 9)
   const goalFatHigh     = Math.round(goal * 0.30 / 9)
-  const goalCarbsLow    = Math.round(goal * 0.50 / 4)
-  const goalCarbsHigh   = Math.round(goal * 0.60 / 4)
+  const goalCarbsLow    = Math.round(Math.max(0, goal - goalProteinHigh * 4 - goalFatHigh * 9) / 4)
+  const goalCarbsHigh   = Math.round(Math.max(0, goal - goalProteinLow  * 4 - goalFatLow  * 9) / 4)
 
   const hasApiKey = !!getApiKey()
 
