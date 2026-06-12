@@ -119,8 +119,8 @@ export async function getMealAdvice(meal: MealLog, data: AppData): Promise<strin
   const proteinHigh = weightKg ? Math.round(weightKg * 2.0) : null
   const fatLow      = Math.round(goal * 0.20 / 9)
   const fatHigh     = Math.round(goal * 0.30 / 9)
-  const carbsLow    = Math.round(goal * 0.50 / 4)
-  const carbsHigh   = Math.round(goal * 0.60 / 4)
+  const carbsLow    = proteinLow != null ? Math.round(Math.max(0, goal - Math.round(weightKg! * 2.0) * 4 - fatHigh * 9) / 4) : Math.round(Math.max(0, goal - fatHigh * 9) / 4)
+  const carbsHigh   = proteinLow != null ? Math.round(Math.max(0, goal - Math.round(weightKg! * 1.6) * 4 - fatLow  * 9) / 4) : Math.round(Math.max(0, goal - fatLow  * 9) / 4)
   const pfcTargetLine = proteinLow != null
     ? `PFC目標レンジ: タンパク質${proteinLow}〜${proteinHigh}g / 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
     : `PFC目標レンジ: 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
@@ -248,8 +248,8 @@ export async function getDailyAdvice(data: AppData): Promise<string> {
   const proteinHigh = weightKg ? Math.round(weightKg * 2.0) : null
   const fatLow      = Math.round(goal * 0.20 / 9)
   const fatHigh     = Math.round(goal * 0.30 / 9)
-  const carbsLow    = Math.round(goal * 0.50 / 4)
-  const carbsHigh   = Math.round(goal * 0.60 / 4)
+  const carbsLow    = proteinHigh != null ? Math.round(Math.max(0, goal - proteinHigh * 4 - fatHigh * 9) / 4) : Math.round(Math.max(0, goal - fatHigh * 9) / 4)
+  const carbsHigh   = proteinLow  != null ? Math.round(Math.max(0, goal - proteinLow  * 4 - fatLow  * 9) / 4) : Math.round(Math.max(0, goal - fatLow  * 9) / 4)
   const pfcTargetLine = proteinLow != null
     ? `PFC目標レンジ: タンパク質${proteinLow}〜${proteinHigh}g / 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
     : `PFC目標レンジ: 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
@@ -295,8 +295,8 @@ export async function getWeeklyAdvice(data: AppData): Promise<string> {
   const proteinHigh = weightKg ? Math.round(weightKg * 2.0) : null
   const fatLow      = Math.round(goal * 0.20 / 9)
   const fatHigh     = Math.round(goal * 0.30 / 9)
-  const carbsLow    = Math.round(goal * 0.50 / 4)
-  const carbsHigh   = Math.round(goal * 0.60 / 4)
+  const carbsLow    = proteinHigh != null ? Math.round(Math.max(0, goal - proteinHigh * 4 - fatHigh * 9) / 4) : Math.round(Math.max(0, goal - fatHigh * 9) / 4)
+  const carbsHigh   = proteinLow  != null ? Math.round(Math.max(0, goal - proteinLow  * 4 - fatLow  * 9) / 4) : Math.round(Math.max(0, goal - fatLow  * 9) / 4)
   const pfcTargetLine = proteinLow != null
     ? `PFC目標レンジ: タンパク質${proteinLow}〜${proteinHigh}g / 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
     : `PFC目標レンジ: 脂質${fatLow}〜${fatHigh}g / 炭水化物${carbsLow}〜${carbsHigh}g`
