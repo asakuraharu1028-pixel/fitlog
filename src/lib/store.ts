@@ -1,8 +1,39 @@
 import { create } from 'zustand'
-import type { AppData } from '../types'
+import type { AppData, StepLog } from '../types'
 import { loadFromDrive, saveToDrive } from './google'
 import { localDateStr } from './utils'
 import { syncWidgetData } from './widget'
+
+// id フィールドを持つレコードをマージ（ローカル優先、どちらにしかないものも保持）
+function mergeById<T extends { id: string }>(local: T[], remote: T[]): T[] {
+  const map = new Map<string, T>()
+  for (const item of remote) map.set(item.id, item)
+  for (const item of local) map.set(item.id, item) // ローカルが新しい場合はローカル優先
+  return Array.from(map.values())
+}
+
+// StepLog は id なし・date キーでマージ
+function mergeStepLogs(local: StepLog[], remote: StepLog[]): StepLog[] {
+  const map = new Map<string, StepLog>()
+  for (const item of remote) map.set(item.date, item)
+  for (const item of local) map.set(item.date, item)
+  return Array.from(map.values())
+}
+
+function mergeData(local: AppData, remote: AppData): AppData {
+  return {
+    ...remote, // settings 等は Drive 側を優先
+    mealLogs:     mergeById(local.mealLogs,     remote.mealLogs),
+    bodyRecords:  mergeById(local.bodyRecords,  remote.bodyRecords),
+    cardioLogs:   mergeById(local.cardioLogs,   remote.cardioLogs),
+    strengthLogs: mergeById(local.strengthLogs, remote.strengthLogs),
+    sleepLogs:    mergeById(local.sleepLogs  ?? [], remote.sleepLogs  ?? []),
+    adviceLogs:   mergeById(local.adviceLogs ?? [], remote.adviceLogs ?? []),
+    stepLogs:     mergeStepLogs(local.stepLogs ?? [], remote.stepLogs ?? []),
+    templateFoods: mergeById(local.templateFoods ?? [], remote.templateFoods ?? []),
+    periodLogs:   mergeById(local.periodLogs ?? [], remote.periodLogs ?? []),
+  }
+}
 
 /**
  * UTC日付で保存されてしまったレコードを修正するマイグレーション。
@@ -101,10 +132,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
     try {
       const remote = await loadFromDrive<AppData>()
       if (remote && Array.isArray(remote.bodyRecords)) {
-        const merged = migrateUtcDates({ ...DEFAULT_DATA, ...remote })
+        const remoteWithDefaults = migrateUtcDates({ ...DEFAULT_DATA, ...remote })
+        // ロード完了時点のストア（saveData が isLoading 中に書き込んでいる場合がある）とマージ
+        const currentLocal = loadFromLocal() ?? get().data
+        const merged = migrateUtcDates(mergeData(currentLocal, remoteWithDefaults))
         set({ data: merged })
         saveToLocal(merged)
         syncWidgetData(merged)
+        // マージ結果を Drive にも書き戻す（ローカルのみのレコードを反映）
+        saveToDrive(merged).catch((e) => console.warn('Drive write-back error:', e))
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -116,8 +152,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   saveData: async (patch) => {
-    // Drive からのロード完了前に保存すると上書きされるためガード
-    if (get().isLoading) return
     const next = { ...get().data, ...patch }
     set({ data: next, isSaving: true, driveError: null })
     saveToLocal(next)
