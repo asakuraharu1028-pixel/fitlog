@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAppStore } from '../lib/store'
 import { localDateStr } from '../lib/utils'
+import DateSelector from '../components/DateSelector'
 import type { BodyRecord, PeriodLog } from '../types'
 import { nanoid } from 'nanoid'
 import {
@@ -46,7 +47,8 @@ export default function Body() {
   const [showPeriodForm, setShowPeriodForm] = useState(false)
 
   const today = localDateStr()
-  const existing = data.bodyRecords.find((r) => r.date === today)
+  const [selectedDate, setSelectedDate] = useState(today)
+  const existing = data.bodyRecords.find((r) => r.date === selectedDate)
 
   const handleSave = async () => {
     const w = parseFloat(weight)
@@ -56,12 +58,12 @@ export default function Body() {
       const bf = parseFloat(bodyFat)
       const record: BodyRecord = {
         id: existing?.id ?? nanoid(),
-        date: today,
+        date: selectedDate,
         weight: w,
         bodyFatPct: isNaN(bf) ? undefined : bf,
         bmi: calcBMI(w, data.settings.heightCm),
       }
-      const updated = data.bodyRecords.filter((r) => r.date !== today)
+      const updated = data.bodyRecords.filter((r) => r.date !== selectedDate)
       updated.push(record)
       await saveData({ bodyRecords: updated })
       setSaved(true)
@@ -139,9 +141,14 @@ export default function Body() {
   return (
     <div className="p-4 space-y-4">
 
-      {/* 今日の入力 */}
+      {/* 日付セレクター */}
+      <DateSelector date={selectedDate} onChange={(d) => { setSelectedDate(d); setWeight(''); setBodyFat('') }} />
+
+      {/* 入力 */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="font-semibold text-gray-700 mb-3">今日の記録</h2>
+        <h2 className="font-semibold text-gray-700 mb-3">
+          {selectedDate === today ? '今日' : selectedDate}の記録
+        </h2>
         <div className="space-y-3">
           <label className="block">
             <span className="text-sm text-gray-500">体重 (kg)</span>

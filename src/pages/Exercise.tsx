@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAppStore } from '../lib/store'
 import { localDateStr } from '../lib/utils'
+import DateSelector from '../components/DateSelector'
 import {
   CARDIO_DB, STRENGTH_DB,
   calcCardioCalories, calcStrengthCalories, calcVolume, calcTreadmillMet,
@@ -17,6 +18,7 @@ const CATEGORIES = ['全身', '胸', '背中', '肩', '腕', '脚', '体幹'] as
 export default function Exercise() {
   const { data, saveData } = useAppStore()
   const today = localDateStr()
+  const [selectedDate, setSelectedDate] = useState(today)
   const bodyWeight = data.bodyRecords.slice().sort((a, b) => b.date.localeCompare(a.date))[0]?.weight ?? 60
 
   const [tab, setTab] = useState<Tab>('cardio')
@@ -47,8 +49,8 @@ export default function Exercise() {
   // 展開
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const todayCardio   = data.cardioLogs.filter((c) => c.date === today)
-  const todayStrength = data.strengthLogs.filter((s) => s.date === today)
+  const todayCardio   = data.cardioLogs.filter((c) => c.date === selectedDate)
+  const todayStrength = data.strengthLogs.filter((s) => s.date === selectedDate)
 
   const totalBurned =
     todayCardio.reduce((s, c) => s + c.caloriesBurned, 0) +
@@ -69,7 +71,7 @@ export default function Exercise() {
         : exercise.name
       const log: CardioLog = {
         id: nanoid(),
-        date: today,
+        date: selectedDate,
         name,
         durationMin: dur,
         met,
@@ -96,7 +98,7 @@ export default function Exercise() {
     try {
       const log: StrengthLog = {
         id: nanoid(),
-        date: today,
+        date: selectedDate,
         name: exercise.name,
         sets,
         estimatedCalories: calcStrengthCalories(exercise.metPerMin, bodyWeight, sets, isSeconds),
@@ -138,6 +140,9 @@ export default function Exercise() {
 
   return (
     <div className="p-4 space-y-4">
+
+      {/* 日付セレクター */}
+      <DateSelector date={selectedDate} onChange={setSelectedDate} />
 
       {/* AIアドバイス（運動保存後に表示） */}
       {hasApiKey && lastSavedLog && (
@@ -183,9 +188,11 @@ export default function Exercise() {
         </div>
       )}
 
-      {/* 今日のサマリー */}
+      {/* サマリー */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="font-semibold text-gray-700 mb-3">今日の運動</h2>
+        <h2 className="font-semibold text-gray-700 mb-3">
+          {selectedDate === today ? '今日' : selectedDate}の運動
+        </h2>
         <div className="flex justify-around text-center">
           <div>
             <p className="text-2xl font-bold text-orange-500">{totalBurned}</p>
@@ -275,10 +282,12 @@ export default function Exercise() {
             </button>
           </div>
 
-          {/* 今日の有酸素履歴 */}
+          {/* 有酸素履歴 */}
           {todayCardio.length > 0 && (
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <h2 className="font-semibold text-gray-700 mb-3">今日の有酸素</h2>
+              <h2 className="font-semibold text-gray-700 mb-3">
+                {selectedDate === today ? '今日' : selectedDate}の有酸素
+              </h2>
               <div className="space-y-2">
                 {todayCardio.map((c) => (
                   <div key={c.id} className="flex justify-between items-center border border-gray-100 rounded-xl px-3 py-2.5">
@@ -398,10 +407,12 @@ export default function Exercise() {
             </button>
           </div>
 
-          {/* 今日の筋トレ履歴 */}
+          {/* 筋トレ履歴 */}
           {todayStrength.length > 0 && (
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <h2 className="font-semibold text-gray-700 mb-3">今日の筋トレ</h2>
+              <h2 className="font-semibold text-gray-700 mb-3">
+                {selectedDate === today ? '今日' : selectedDate}の筋トレ
+              </h2>
               <div className="space-y-2">
                 {todayStrength.map((s) => {
                   const isOpen = expandedId === s.id

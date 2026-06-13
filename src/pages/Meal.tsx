@@ -4,6 +4,7 @@ import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/
 import { Capacitor } from '@capacitor/core'
 import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
+import DateSelector from '../components/DateSelector'
 import { analyzeFoodText, analyzeFoodImage, analyzeFoodLabel, getApiKey, type AiFoodResult } from '../lib/gemini'
 import { lookupBarcode, BarcodeNotFoundError, submitToOpenFoodFacts, toPer100g } from '../lib/barcode'
 import { getMealAdvice, getMealSuggestion } from '../lib/advice'
@@ -332,6 +333,7 @@ export default function Meal() {
   const navigate = useNavigate()
   const location = useLocation()
   const today = localDateStr()
+  const [selectedDate, setSelectedDate] = useState(today)
 
   const [mealType, setMealType] = useState<MealType>(() => {
     const order: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack']
@@ -388,9 +390,9 @@ export default function Meal() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 今日の食事ログ
+  // 選択日の食事ログ
   const todayLogs = data.mealLogs
-    .filter((m) => m.date === today)
+    .filter((m) => m.date === selectedDate)
     .sort((a, b) => {
       const order: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack']
       return order.indexOf(a.mealType as MealType) - order.indexOf(b.mealType as MealType)
@@ -609,7 +611,7 @@ export default function Meal() {
 
       const entries = results.map(toFoodEntry)
       const existing = data.mealLogs.find(
-        (m) => m.date === today && m.mealType === mealType
+        (m) => m.date === selectedDate && m.mealType === mealType
       )
       let updatedLogs: MealLog[]
       if (existing) {
@@ -617,7 +619,7 @@ export default function Meal() {
           m.id === existing.id ? { ...m, entries: [...m.entries, ...entries] } : m
         )
       } else {
-        updatedLogs = [...data.mealLogs, { id: nanoid(), date: today, mealType, entries }]
+        updatedLogs = [...data.mealLogs, { id: nanoid(), date: selectedDate, mealType, entries }]
       }
       await saveData({ mealLogs: updatedLogs })
       setResults(null)
@@ -628,7 +630,7 @@ export default function Meal() {
       setLabelBase64(null)
       setLabelPreviewUrl(null)
 
-      const savedLog = updatedLogs.find(m => m.date === today && m.mealType === mealType)
+      const savedLog = updatedLogs.find(m => m.date === selectedDate && m.mealType === mealType)
       if (savedLog) {
         setLastSavedLog(savedLog)
         setAdvice(null)
@@ -642,6 +644,9 @@ export default function Meal() {
 
   return (
     <div className="p-4 space-y-4">
+
+      {/* 日付セレクター */}
+      <DateSelector date={selectedDate} onChange={(d) => { setSelectedDate(d); reset() }} />
 
       {/* 週間献立プランへのリンク */}
       <button
@@ -703,7 +708,7 @@ export default function Meal() {
             const MEAL_ORDER = ['breakfast', 'lunch', 'dinner'] as const
             type MealOrderType = typeof MEAL_ORDER[number]
             const registeredTypes = new Set(
-              useAppStore.getState().data.mealLogs.filter(m => m.date === today).map(m => m.mealType as MealOrderType)
+              useAppStore.getState().data.mealLogs.filter(m => m.date === selectedDate).map(m => m.mealType as MealOrderType)
             )
             const unregistered = MEAL_ORDER.filter(t => !registeredTypes.has(t))
             if (unregistered.length === 0) return null
@@ -753,11 +758,13 @@ export default function Meal() {
         </div>
       )}
 
-      {/* 今日の栄養サマリー */}
+      {/* 栄養サマリー */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
         <div className="flex justify-between items-center mb-3">
-          <h2 className="font-semibold text-gray-700">今日の栄養摂取</h2>
-          <span className="text-xs text-gray-400">{today}</span>
+          <h2 className="font-semibold text-gray-700">
+            {selectedDate === today ? '今日' : selectedDate}の栄養摂取
+          </h2>
+          <span className="text-xs text-gray-400">{selectedDate}</span>
         </div>
         <div className="flex justify-around text-center mb-3">
           <div>
@@ -796,11 +803,11 @@ export default function Meal() {
           ))}
         </div>
         {/* 食べなかったボタン（選択中の食事タイプがまだ未登録の場合のみ表示） */}
-        {!data.mealLogs.find(m => m.date === today && m.mealType === mealType) && mode === 'idle' && (
+        {!data.mealLogs.find(m => m.date === selectedDate && m.mealType === mealType) && mode === 'idle' && (
           <button
             onClick={async () => {
               const newLog: import('../types').MealLog = {
-                id: nanoid(), date: today, mealType, entries: [], skipped: true,
+                id: nanoid(), date: selectedDate, mealType, entries: [], skipped: true,
               }
               await saveData({ mealLogs: [...data.mealLogs, newLog] })
             }}
@@ -1115,10 +1122,12 @@ export default function Meal() {
         )}
       </div>
 
-      {/* 今日の食事一覧 */}
+      {/* 食事一覧 */}
       {todayLogs.length > 0 && (
         <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <h2 className="font-semibold text-gray-700 mb-3">今日の食事</h2>
+          <h2 className="font-semibold text-gray-700 mb-3">
+            {selectedDate === today ? '今日' : selectedDate}の食事
+          </h2>
           <div className="space-y-2">
             {todayLogs.map((log) => {
               const logCal = log.entries.reduce((s, e) => s + e.calories, 0)
