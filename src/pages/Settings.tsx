@@ -641,14 +641,15 @@ export default function Settings() {
                   logs.push('⚠ HC に睡眠データがないか、SleepSessionRecord が記録されていない可能性があります')
                 }
                 const { data: latestData, saveData: sleepSave } = useAppStore.getState()
-                // HC データで日付ごとに上書き（upsert）。HC 側を正とする
-                const hcSleepByDate = new Map(
-                  sleeps.map((s: { date: string; startTime: string; endTime: string; durationMin: number }) => [s.date, s])
+                // HC データで startTime ごとに上書き（upsert）。HC 側を正とする
+                // ※ 同日に本睡眠＋仮眠など複数セッションがある場合も全て保持する
+                const hcSleepByStart = new Map(
+                  sleeps.map((s: { date: string; startTime: string; endTime: string; durationMin: number }) => [s.startTime, s])
                 )
                 const existingOtherSleeps = (latestData.sleepLogs ?? []).filter(
-                  (s: { date: string }) => !hcSleepByDate.has(s.date)
+                  (s: { startTime: string }) => !hcSleepByStart.has(s.startTime)
                 )
-                const hcSleepRecords = Array.from(hcSleepByDate.values()).map(
+                const hcSleepRecords = Array.from(hcSleepByStart.values()).map(
                   (s: { date: string; startTime: string; endTime: string; durationMin: number }) => ({ id: nanoid(), ...s })
                 )
                 const mergedSleepLogs = [...existingOtherSleeps, ...hcSleepRecords]
