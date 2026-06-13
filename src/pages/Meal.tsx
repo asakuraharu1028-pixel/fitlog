@@ -8,7 +8,7 @@ import DateSelector from '../components/DateSelector'
 import { analyzeFoodText, analyzeFoodImage, analyzeFoodLabel, getApiKey, type AiFoodResult } from '../lib/gemini'
 import { lookupBarcode, BarcodeNotFoundError, submitToOpenFoodFacts, toPer100g } from '../lib/barcode'
 import { getMealAdvice, getMealSuggestion } from '../lib/advice'
-import type { MealLog, FoodEntry, TemplateFoodItem } from '../types'
+import type { MealLog, FoodEntry, TemplateFoodItem, AdviceLog } from '../types'
 import { nanoid } from 'nanoid'
 import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange, BookMarked, Upload, Search, BookOpen } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
@@ -682,8 +682,19 @@ export default function Meal() {
                     setAdviceLoading(true)
                     setAdvice(null)
                     try {
-                      const a = await getMealAdvice(lastSavedLog, useAppStore.getState().data)
-                      if (a) setAdvice(a)
+                      const currentData = useAppStore.getState().data
+                      const a = await getMealAdvice(lastSavedLog, currentData)
+                      if (a) {
+                        setAdvice(a)
+                        // adviceLogs に保存してカレンダーにも反映
+                        const date = lastSavedLog.date
+                        const existing = (currentData.adviceLogs ?? []).find(l => l.date === date)
+                        const log: AdviceLog = existing
+                          ? { ...existing, daily: a }
+                          : { id: nanoid(), date, createdAt: new Date().toISOString(), daily: a, weekly: '' }
+                        const rest = (currentData.adviceLogs ?? []).filter(l => l.date !== date)
+                        await saveData({ adviceLogs: [...rest, log] })
+                      }
                     } finally {
                       setAdviceLoading(false)
                     }
