@@ -60,6 +60,10 @@ export default function Calendar() {
   const sleepDates  = new Set((data.sleepLogs ?? []).map(s => sleepWakeDate(s)))
   const adviceDates = new Set((data.adviceLogs ?? []).map(a => a.date))
 
+  const adviceScoreMap = new Map(
+    (data.adviceLogs ?? []).filter(a => a.score != null).map(a => [a.date, a.score!])
+  )
+
   const dotsFor = (dateStr: string): DayDots => ({
     meal:     mealDates.has(dateStr),
     exercise: exerciseDates.has(dateStr),
@@ -120,6 +124,8 @@ export default function Calendar() {
             const isSel   = dateStr === selected
             const dow     = (offset + i) % 7
 
+            const dayScore = adviceScoreMap.get(dateStr)
+
             return (
               <button
                 key={day}
@@ -131,13 +137,20 @@ export default function Calendar() {
                   ${isSel ? 'text-white' : isToday ? 'text-green-600' : dow === 0 ? 'text-red-400' : dow === 6 ? 'text-blue-400' : 'text-gray-700'}`}>
                   {day}
                 </span>
-                <div className="flex gap-0.5 mt-0.5 h-2 items-center">
-                  {dots.meal     && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-green-400'}`} />}
-                  {dots.exercise && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-orange-400'}`} />}
-                  {dots.body     && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-blue-400'}`} />}
-                  {dots.sleep    && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-indigo-400'}`} />}
-                  {dots.advice   && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-purple-400'}`} />}
-                </div>
+                {dayScore != null ? (
+                  <span className={`text-xs font-bold leading-none mt-0.5
+                    ${isSel ? 'text-white' : dayScore >= 80 ? 'text-green-500' : dayScore >= 60 ? 'text-yellow-500' : 'text-red-500'}`}>
+                    {dayScore}
+                  </span>
+                ) : (
+                  <div className="flex gap-0.5 mt-0.5 h-2 items-center">
+                    {dots.meal     && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-green-400'}`} />}
+                    {dots.exercise && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-orange-400'}`} />}
+                    {dots.body     && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-blue-400'}`} />}
+                    {dots.sleep    && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-indigo-400'}`} />}
+                    {dots.advice   && <span className={`w-1.5 h-1.5 rounded-full ${isSel ? 'bg-white' : 'bg-purple-400'}`} />}
+                  </div>
+                )}
               </button>
             )
           })}
@@ -276,6 +289,25 @@ export default function Calendar() {
               <p className="text-xs font-semibold text-gray-500 flex items-center gap-1">
                 <Sparkles size={12} className="text-purple-400" /> AIアドバイス
               </p>
+              {selAdvice.score != null && (
+                <div className="flex items-center gap-3 p-2.5 bg-purple-50 rounded-xl">
+                  <div className="text-center shrink-0">
+                    <p className={`text-2xl font-bold ${selAdvice.score >= 80 ? 'text-green-500' : selAdvice.score >= 60 ? 'text-yellow-500' : 'text-red-500'}`}>
+                      {selAdvice.score}
+                    </p>
+                    <p className="text-xs text-gray-400">/ 100</p>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs font-semibold text-purple-600">健康スコア</p>
+                    <div className="mt-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${selAdvice.score >= 80 ? 'bg-green-500' : selAdvice.score >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                        style={{ width: `${selAdvice.score}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
               {selAdvice.daily && (
                 <div>
                   <p className="text-xs font-semibold text-purple-600 mb-0.5">📅 今日の総括</p>

@@ -77,6 +77,7 @@ export default function Home() {
   // アドバイス
   const [dailyAdvice,   setDailyAdvice]   = useState<string | null>(null)
   const [weeklyAdvice,  setWeeklyAdvice]  = useState<string | null>(null)
+  const [adviceScore,   setAdviceScore]   = useState<number | null>(null)
   const [adviceLoading, setAdviceLoading] = useState(false)
   const [adviceError,   setAdviceError]   = useState<string | null>(null)
 
@@ -84,14 +85,18 @@ export default function Home() {
     setAdviceLoading(true)
     setDailyAdvice(null)
     setWeeklyAdvice(null)
+    setAdviceScore(null)
     setAdviceError(null)
     try {
-      const [d, w] = await Promise.all([
+      const [daily, w] = await Promise.all([
         getDailyAdvice(data),
         getWeeklyAdvice(data),
       ])
+      const d = daily.advice
+      const score = daily.score
       setDailyAdvice(d || null)
       setWeeklyAdvice(w || null)
+      setAdviceScore(score || null)
       if (d || w) {
         const log: AdviceLog = {
           id: crypto.randomUUID(),
@@ -99,6 +104,7 @@ export default function Home() {
           createdAt: new Date().toISOString(),
           daily: d ?? '',
           weekly: w ?? '',
+          score: score || undefined,
         }
         const existing = (data.adviceLogs ?? []).filter(a => a.date !== today)
         await saveData({ adviceLogs: [...existing, log] })
@@ -332,6 +338,26 @@ export default function Home() {
 
         {adviceError && (
           <p className="text-xs text-red-500 break-all">✗ {adviceError}</p>
+        )}
+
+        {adviceScore != null && (
+          <div className="flex items-center gap-3 mb-3 p-3 bg-purple-50 rounded-xl">
+            <div className="text-center shrink-0">
+              <p className={`text-3xl font-bold ${adviceScore >= 80 ? 'text-green-500' : adviceScore >= 60 ? 'text-yellow-500' : 'text-red-500'}`}>
+                {adviceScore}
+              </p>
+              <p className="text-xs text-gray-400">/ 100点</p>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-purple-600">今日の健康スコア</p>
+              <div className="mt-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${adviceScore >= 80 ? 'bg-green-500' : adviceScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                  style={{ width: `${adviceScore}%` }}
+                />
+              </div>
+            </div>
+          </div>
         )}
 
         {dailyAdvice && (

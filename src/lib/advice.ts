@@ -238,8 +238,8 @@ function dayStats(data: AppData, date: string) {
   return { calories, protein, fat, carbs, sodium, burned, sleep, steps }
 }
 
-export async function getDailyAdvice(data: AppData): Promise<string> {
-  if (!getApiKey()) return ''
+export async function getDailyAdvice(data: AppData): Promise<{ advice: string; score: number }> {
+  if (!getApiKey()) return { advice: '', score: 0 }
   const today = localDateStr()
   const s = dayStats(data, today)
   const goal = data.settings.goalCalories ?? 2000
@@ -261,9 +261,14 @@ ${pfcTargetLine}
 塩分相当量: ${(s.sodium * 2.54 / 1000).toFixed(1)}g（目安: 男性7.5g未満、女性6.5g未満）
 消費カロリー: ${s.burned}kcal${s.steps > 0 ? `\n歩数: ${s.steps.toLocaleString()}歩` : ''}
 睡眠: ${s.sleep > 0 ? `${Math.floor(s.sleep / 60)}時間${s.sleep % 60}分` : '未記録'}
-今日の改善点や明日への具体的なアドバイスを3点、箇条書きで短く教えてください。`
+今日の改善点や明日への具体的なアドバイスを3点、箇条書きで短く教えてください。
+最後の行に必ず「点数: XX」という形式で100点満点の今日の健康スコアを整数で出力してください。`
 
-  return callAI(prompt, data)
+  const raw = await callAI(prompt, data)
+  const match = raw.match(/点数[:：]\s*(\d+)/)
+  const score = match ? Math.min(100, Math.max(0, parseInt(match[1], 10))) : 0
+  const advice = raw.replace(/\n?点数[:：]\s*\d+\s*$/, '').trim()
+  return { advice, score }
 }
 
 export async function getWeeklyAdvice(data: AppData): Promise<string> {

@@ -1,26 +1,44 @@
 {
   "project_info": {
-    "project_number": "133650855109",
-    "project_id": "fitlog-497809",
-    "storage_bucket": "fitlog-497809.firebasestorage.app"
+    "project_number": "685129420203",
+    "project_id": "spherical-frame-473913-p6",
+    "storage_bucket": "spherical-frame-473913-p6.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:133650855109:android:518f13df3dcf0b9f936cac",
+        "mobilesdk_app_id": "1:685129420203:android:e7c0b886658481567116ee",
         "android_client_info": {
           "package_name": "com.fitlog.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "685129420203-dufioist84icrt495iahbbqh67b76p6p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fitlog.app",
+            "certificate_hash": "efedad9e77dd12d94bba5d9410ababb8e75e6ad8"
+          }
+        },
+        {
+          "client_id": "685129420203-9k3edai0b7kh28or4ummjpnourgh2g8u.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyCfDCqctQMpB6cy4X7JXbGKcKUdjbv-RrI"
+          "current_key": "AIzaSyAXkJAYV3XRtx0A-y6wpPB61ZEcnXm9kno"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "685129420203-9k3edai0b7kh28or4ummjpnourgh2g8u.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

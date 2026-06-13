@@ -4,5 +4,6 @@
     <string name="title_activity_main">FitLog</string>
     <string name="package_name">com.fitlog.app</string>
     <string name="custom_url_scheme">com.fitlog.app</string>
+    <string name="server_client_id">685129420203-9k3edai0b7kh28or4ummjpnourgh2g8u.apps.googleusercontent.com</string>
     <string name="widget_description">今日のカロリー・体重をホーム画面に表示</string>
 </resources>

@@ -110,6 +110,7 @@ export interface AdviceLog {
   createdAt: string  // ISO8601
   daily: string
   weekly: string
+  score?: number     // 100点満点の健康スコア
 }
 
 export type DietPolicy = 'meal' | 'balance' | 'exercise'
