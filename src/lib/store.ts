@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AppData, StepLog } from '../types'
+import type { AppData, StepLog, SleepLog } from '../types'
 import { loadFromDrive, saveToDrive } from './google'
 import { localDateStr } from './utils'
 import { syncWidgetData } from './widget'
@@ -12,11 +12,29 @@ function mergeById<T extends { id: string }>(local: T[], remote: T[]): T[] {
   return Array.from(map.values())
 }
 
-// StepLog は id なし・date キーでマージ
+// StepLog は id なし・date キーでマージ（歩数の多い方を優先）
 function mergeStepLogs(local: StepLog[], remote: StepLog[]): StepLog[] {
   const map = new Map<string, StepLog>()
   for (const item of remote) map.set(item.date, item)
-  for (const item of local) map.set(item.date, item)
+  for (const item of local) {
+    const existing = map.get(item.date)
+    // ローカルとリモート両方にある場合は歩数が多い方を採用
+    if (!existing || item.steps > existing.steps) {
+      map.set(item.date, item)
+    }
+  }
+  return Array.from(map.values())
+}
+
+// SleepLog は id でマージした後、startTime で重複排除（HC再同期でIDが変わる場合の対策）
+function mergeSleepLogs(local: SleepLog[], remote: SleepLog[]): SleepLog[] {
+  const byId = mergeById(local, remote)
+  const map = new Map<string, SleepLog>()
+  for (const item of byId) {
+    if (!map.has(item.startTime)) {
+      map.set(item.startTime, item)
+    }
+  }
   return Array.from(map.values())
 }
 
@@ -27,7 +45,7 @@ function mergeData(local: AppData, remote: AppData): AppData {
     bodyRecords:  mergeById(local.bodyRecords,  remote.bodyRecords),
     cardioLogs:   mergeById(local.cardioLogs,   remote.cardioLogs),
     strengthLogs: mergeById(local.strengthLogs, remote.strengthLogs),
-    sleepLogs:    mergeById(local.sleepLogs  ?? [], remote.sleepLogs  ?? []),
+    sleepLogs:    mergeSleepLogs(local.sleepLogs  ?? [], remote.sleepLogs  ?? []),
     adviceLogs:   mergeById(local.adviceLogs ?? [], remote.adviceLogs ?? []),
     stepLogs:     mergeStepLogs(local.stepLogs ?? [], remote.stepLogs ?? []),
     templateFoods: mergeById(local.templateFoods ?? [], remote.templateFoods ?? []),
