@@ -643,14 +643,32 @@ export default function Settings() {
                 const { data: latestData, saveData: sleepSave } = useAppStore.getState()
                 // HC データで startTime ごとに上書き（upsert）。HC 側を正とする
                 // ※ 同日に本睡眠＋仮眠など複数セッションがある場合も全て保持する
+                // ※ 重複するセッション（ステージレコード）は最長のものだけ残す
+                const deduped = (sleeps as { date: string; startTime: string; endTime: string; durationMin: number }[])
+                  .filter(s => {
+                    // 自分より長い（=自分を包含する）セッションが存在する場合は除外
+                    const sStart = new Date(s.startTime).getTime()
+                    const sEnd   = new Date(s.endTime).getTime()
+                    return !sleeps.some((o: { startTime: string; endTime: string; durationMin: number }) => {
+                      if (o === s) return false
+                      const oStart = new Date(o.startTime).getTime()
+                      const oEnd   = new Date(o.endTime).getTime()
+                      return oStart <= sStart && oEnd >= sEnd && o.durationMin > s.durationMin
+                    })
+                  })
                 const hcSleepByStart = new Map(
-                  sleeps.map((s: { date: string; startTime: string; endTime: string; durationMin: number }) => [s.startTime, s])
+                  deduped.map(s => [s.startTime, s])
                 )
+                // 再同期でも同じ startTime のレコードは既存 ID を再利用し、Drive マージで古いデータが勝つのを防ぐ
+                const existingIdByStart = new Map((latestData.sleepLogs ?? []).map(s => [s.startTime, s.id]))
                 const existingOtherSleeps = (latestData.sleepLogs ?? []).filter(
                   (s: { startTime: string }) => !hcSleepByStart.has(s.startTime)
                 )
                 const hcSleepRecords = Array.from(hcSleepByStart.values()).map(
-                  (s: { date: string; startTime: string; endTime: string; durationMin: number }) => ({ id: nanoid(), ...s })
+                  (s: { date: string; startTime: string; endTime: string; durationMin: number }) => ({
+                    id: existingIdByStart.get(s.startTime) ?? nanoid(),
+                    ...s,
+                  })
                 )
                 const mergedSleepLogs = [...existingOtherSleeps, ...hcSleepRecords]
                   .sort((a, b) => a.date.localeCompare(b.date))
