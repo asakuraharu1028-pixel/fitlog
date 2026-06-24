@@ -230,6 +230,6 @@ export interface AppData {
     dietPolicy?: DietPolicy
     /** 活動レベル */
     activityLevel?: ActivityLevel
-    advisorCharacter?: 'default' | 'kenmochi' | 'gaku' | 'togabito'
+    advisorCharacter?: 'default' | 'kenmochi' | 'gaku' | 'togabito' | 'domoto'
   }
 }

@@ -128,8 +128,6 @@ export const CHARACTERS: CharacterDef[] = [
 
 返答は必ず上記の形式で、日本語のみで出力してください。`,
   },
-]
-
   {
     id: 'domoto',
     name: 'DOMOTO',
