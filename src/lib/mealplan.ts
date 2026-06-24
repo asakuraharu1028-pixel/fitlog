@@ -109,6 +109,7 @@ function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSetti
   const snackCal    = Math.round(goalCalories * 0.15)
 
   return `あなたは管理栄養士です。目標摂取カロリー ${goalCalories}kcal/日 に合わせた5日間の献立を作成してください。
+料理名・食品名はすべて日本語で記載してください（英語表記は使わないこと）。
 
 【条件】
 - 食事スタイル: 日本人の一般的な家庭料理
