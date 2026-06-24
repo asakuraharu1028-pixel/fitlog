@@ -115,6 +115,8 @@ export interface AdviceLog {
 
 export type DietPolicy = 'meal' | 'balance' | 'exercise'
 
+export type ActivityLevel = 'low' | 'moderate' | 'high'
+
 export interface MealPlanDish {
   name: string
   calories: number
@@ -226,6 +228,8 @@ export interface AppData {
     goalMonths?: number
     /** ダイエット方針 */
     dietPolicy?: DietPolicy
+    /** 活動レベル */
+    activityLevel?: ActivityLevel
     advisorCharacter?: 'default' | 'kenmochi' | 'gaku' | 'togabito'
   }
 }

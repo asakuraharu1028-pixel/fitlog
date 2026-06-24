@@ -5,7 +5,7 @@ import { CHARACTERS } from '../lib/characters'
 import type { AdvisorCharacterId } from '../lib/characters'
 import { loadFromDrive, saveToDrive, getAccessToken } from '../lib/google'
 import { localDateStr } from '../lib/utils'
-import type { BodyRecord, DietPolicy } from '../types'
+import type { BodyRecord, DietPolicy, ActivityLevel } from '../types'
 type Gender = 'male' | 'female'
 import { isNative } from '../lib/auth'
 import {
@@ -16,6 +16,25 @@ import {
 } from '../lib/healthconnect'
 import { nanoid } from 'nanoid'
 import { Eye, EyeOff } from 'lucide-react'
+
+/** 活動レベルごとの活動係数（日本人の食事摂取基準・厚生労働省） */
+const ACTIVITY_COEFFICIENTS: Record<ActivityLevel, number> = {
+  low:      1.50,
+  moderate: 1.75,
+  high:     2.00,
+}
+
+const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
+  low:      '低い（I）',
+  moderate: 'ふつう（II）',
+  high:     '高い（III）',
+}
+
+const ACTIVITY_DESC: Record<ActivityLevel, string> = {
+  low:      '生活の大部分が座位・静的な活動 × 1.50',
+  moderate: '座位中心だが通勤・家事・軽いスポーツを含む × 1.75',
+  high:     '移動・立位の多い仕事や活発な運動習慣あり × 2.00',
+}
 
 /** ダイエット方針ごとの食事/運動の割合 */
 const POLICY_RATIO: Record<DietPolicy, { meal: number; exercise: number }> = {
@@ -49,13 +68,13 @@ function calcGoals(
   bmr: number,
   goalMonths: number,
   policy: DietPolicy,
+  activityLevel: ActivityLevel,
 ): { intake: number; burn: number; dailyDeficit: number } | null {
   if (currentWeight <= 0 || goalWeight <= 0 || bmr <= 0 || goalMonths <= 0) return null
   // 1kg 脂肪 ≈ 7200 kcal
   const totalDeficit = (currentWeight - goalWeight) * 7200
   const dailyDeficit = totalDeficit / (goalMonths * 30)
-  // TDEE = 基礎代謝 × 活動係数 1.3（軽い活動）
-  const tdee = bmr * 1.3
+  const tdee = bmr * ACTIVITY_COEFFICIENTS[activityLevel]
   const ratio = POLICY_RATIO[policy]
   const intake = Math.round(tdee - dailyDeficit * ratio.meal)
   const burn   = Math.round(Math.max(0, dailyDeficit * ratio.exercise))
@@ -108,6 +127,7 @@ export default function Settings() {
   const [bmrInput, setBmrInput]   = useState(String(s.bmr ?? ''))
   const [goalMonths, setGoalMonths] = useState(String(s.goalMonths ?? ''))
   const [policy, setPolicy]       = useState<DietPolicy>(s.dietPolicy ?? 'balance')
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>(s.activityLevel ?? 'moderate')
   const [saved, setSaved]         = useState(false)
   const [saving, setSaving]       = useState(false)
   const [apiKey, setApiKeyState]  = useState(getApiKey)
@@ -128,6 +148,7 @@ export default function Settings() {
     setBmrInput(String(s.bmr ?? ''))
     setGoalMonths(String(s.goalMonths ?? ''))
     setPolicy(s.dietPolicy ?? 'balance')
+    setActivityLevel(s.activityLevel ?? 'moderate')
   }, [s])
 
   // 最新の体重レコード
@@ -154,8 +175,8 @@ export default function Settings() {
     const gw = parseFloat(goalWeight)
     const bmr = parseFloat(bmrInput) || (bmrEstimate ?? 0)
     const gm = parseFloat(goalMonths)
-    return calcGoals(cw, gw, bmr, gm, policy)
-  }, [latestWeight, goalWeight, bmrInput, bmrEstimate, goalMonths, policy])
+    return calcGoals(cw, gw, bmr, gm, policy, activityLevel)
+  }, [latestWeight, goalWeight, bmrInput, bmrEstimate, goalMonths, policy, activityLevel])
 
   const effectiveGender = gender || undefined
 
@@ -174,6 +195,7 @@ export default function Settings() {
           bmr:             bmrInput    ? parseFloat(bmrInput)    : undefined,
           goalMonths:      goalMonths  ? parseFloat(goalMonths)  : undefined,
           dietPolicy:      policy,
+          activityLevel,
           goalCalories:    goals?.intake,
           goalBurnCalories: goals?.burn,
         },
@@ -279,6 +301,27 @@ export default function Settings() {
               className="mt-1 block w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400"
             />
           </label>
+
+          {/* 活動レベル */}
+          <div>
+            <span className="text-sm font-medium text-gray-600 block mb-2">活動レベル（TDEE計算用）</span>
+            <div className="space-y-2">
+              {(['low', 'moderate', 'high'] as ActivityLevel[]).map(al => (
+                <button
+                  key={al}
+                  type="button"
+                  onClick={() => setActivityLevel(al)}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-left transition
+                    ${activityLevel === al ? 'border-green-400 bg-green-50' : 'border-gray-100 hover:border-gray-200'}`}
+                >
+                  <span className={`text-sm font-medium ${activityLevel === al ? 'text-green-700' : 'text-gray-700'}`}>
+                    {ACTIVITY_LABELS[al]}
+                  </span>
+                  <span className="text-xs text-gray-400 text-right ml-2">{ACTIVITY_DESC[al]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* ダイエット方針 */}
           <div>
