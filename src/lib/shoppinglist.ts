@@ -284,20 +284,22 @@ export async function buildShoppingList(
   const dbIngredients:  ShoppingIngredient[] = []
   const otherDishNames: string[] = []
 
-  // 同じ料理が何回出現したかカウント（重複×人数でスケール）
+  // 同じ料理が何回出現したかカウント + 代表dish（ingredients取得用）
   const dishCount = new Map<string, number>()
+  const dishByName = new Map<string, MealPlanDish>()
   for (const dish of dishes) {
     if (SKIP_WORDS.some(s => dish.name.includes(s))) continue
     dishCount.set(dish.name, (dishCount.get(dish.name) ?? 0) + 1)
+    if (!dishByName.has(dish.name)) dishByName.set(dish.name, dish)
   }
 
   for (const [dishName, count] of dishCount.entries()) {
-    const recipe = matchToRecipe(dishName, recipes)
-    if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
-      // DBに材料登録あり → 人前数×出現回数でスケール
-      const factor = (servings * count) / (recipe.servings || 1)
-      for (const ing of recipe.ingredients) {
-        // 正規化してからスケール（"名前: 数字" + "単位" のような保存形式に対応）
+    const dish = dishByName.get(dishName)!
+
+    if (dish.ingredients && dish.ingredients.length > 0) {
+      // AI生成の材料がある → それを使う（1人前×出現回数でスケール）
+      const factor = servings * count
+      for (const ing of dish.ingredients) {
         const { name: normName, amount: normAmount } = normalizeIngredient(ing.name, ing.amount)
         if (!normName) continue
         const scaled = scaleAmount(normAmount, factor)
@@ -309,8 +311,25 @@ export async function buildShoppingList(
         })
       }
     } else {
-      // DB未登録（またはマッチしない） → その他へ
-      otherDishNames.push(dishName)
+      const recipe = matchToRecipe(dishName, recipes)
+      if (recipe && recipe.ingredients && recipe.ingredients.length > 0) {
+        // DBに材料登録あり → 人前数×出現回数でスケール
+        const factor = (servings * count) / (recipe.servings || 1)
+        for (const ing of recipe.ingredients) {
+          const { name: normName, amount: normAmount } = normalizeIngredient(ing.name, ing.amount)
+          if (!normName) continue
+          const scaled = scaleAmount(normAmount, factor)
+          dbIngredients.push({
+            name: normName,
+            amount: scaled,
+            category: classifyIngredient(normName),
+            fromRecipe: dishName,
+          })
+        }
+      } else {
+        // DB未登録・材料なし → その他へ
+        otherDishNames.push(dishName)
+      }
     }
   }
 
