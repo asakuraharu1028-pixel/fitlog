@@ -117,6 +117,11 @@ export type DietPolicy = 'meal' | 'balance' | 'exercise'
 
 export type ActivityLevel = 'low' | 'moderate' | 'high'
 
+export interface MealPlanIngredient {
+  name: string
+  amount: string
+}
+
 export interface MealPlanDish {
   name: string
   calories: number
@@ -126,6 +131,7 @@ export interface MealPlanDish {
   sodium?: number | null  // 食塩相当量 g
   searchUrl?: string | null
   note?: string | null
+  ingredients?: MealPlanIngredient[] | null
 }
 
 export interface DinnerPlan {

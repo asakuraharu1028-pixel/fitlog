@@ -128,25 +128,52 @@ function CookingSummary({ days }: { days: DayMealPlan[] }) {
 }
 
 function DishRow({ dish }: { dish: MealPlanDish }) {
+  const [open, setOpen] = useState(false)
+  const hasIngredients = dish.ingredients && dish.ingredients.length > 0
+
   return (
-    <div className="flex items-start justify-between py-1.5 border-b border-gray-50 last:border-0 gap-2">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-700 leading-snug">{dish.name}</p>
-        {dish.note && <p className="text-xs text-gray-400 mt-0.5">{dish.note}</p>}
-        <p className="text-xs text-gray-400">
-          P:{Math.round(dish.protein * 10) / 10}g F:{Math.round(dish.fat * 10) / 10}g C:{Math.round(dish.carbs * 10) / 10}g
-          {dish.sodium != null && <> 塩:{Math.round(dish.sodium * 10) / 10}g</>}
-        </p>
+    <div className="border-b border-gray-50 last:border-0">
+      <div className="flex items-start justify-between py-1.5 gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-gray-700 leading-snug">{dish.name}</p>
+          {dish.note && <p className="text-xs text-gray-400 mt-0.5">{dish.note}</p>}
+          <p className="text-xs text-gray-400">
+            P:{Math.round(dish.protein * 10) / 10}g F:{Math.round(dish.fat * 10) / 10}g C:{Math.round(dish.carbs * 10) / 10}g
+            {dish.sodium != null && <> 塩:{Math.round(dish.sodium * 10) / 10}g</>}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-xs font-medium text-gray-600">{dish.calories}kcal</span>
+          {dish.searchUrl && (
+            <a href={dish.searchUrl} target="_blank" rel="noopener noreferrer"
+              className="text-blue-400 hover:text-blue-600 transition" title="レシピを開く">
+              <ExternalLink size={12} />
+            </a>
+          )}
+          {hasIngredients && (
+            <button
+              onClick={() => setOpen(v => !v)}
+              className="text-gray-400 hover:text-gray-600 transition"
+              title="材料を表示"
+            >
+              {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
-        <span className="text-xs font-medium text-gray-600">{dish.calories}kcal</span>
-        {dish.searchUrl && (
-          <a href={dish.searchUrl} target="_blank" rel="noopener noreferrer"
-            className="text-blue-400 hover:text-blue-600 transition" title="おいしい健康でレシピを検索">
-            <ExternalLink size={12} />
-          </a>
-        )}
-      </div>
+      {open && hasIngredients && (
+        <div className="mb-2 px-2 py-1.5 bg-gray-50 rounded-lg">
+          <p className="text-[10px] text-gray-400 font-medium mb-1">材料</p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+            {dish.ingredients!.map((ing, i) => (
+              <div key={i} className="flex justify-between text-xs text-gray-600">
+                <span>{ing.name}</span>
+                <span className="text-gray-400 ml-2 shrink-0">{ing.amount}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -478,10 +505,6 @@ export default function MealPlan() {
             <DayCard key={i} day={day} index={i} />
           ))}
           <CookingSummary days={plan.days} />
-          <p className="text-xs text-center text-gray-400 pb-2">
-            <ExternalLink size={10} className="inline mr-1" />
-            料理名横のアイコンから「おいしい健康」でレシピを検索できます
-          </p>
         </div>
       )}
 

@@ -116,7 +116,8 @@ function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSetti
 - カロリー配分目安: 朝食 ${breakfastCal}kcal、昼食 ${lunchCal}kcal、夕食 ${dinnerCal}kcal、間食 ${snackCal}kcal
 - プロテインサプリメントは1日最大30gまで（間食に組み込み可）
 - 夕食の構成: 主菜・主食・副菜(1〜2種)・汁物（省略・変更も可）
-- レシピURLはDBの各レシピに url: で記載されている場合はその値をそのまま使用。url: がない場合は https://oishi-kenko.com/recipes?q=料理名 の形式で記載
+- レシピDBの料理（下記【レシピDB】に記載）はそのレシピのURLを searchUrl に設定し、ingredients は null とする
+- レシピDB以外のAI提案料理は searchUrl を null とし、ingredients に材料と分量の配列（[{"name":"材料名","amount":"分量"}]）を必ず設定する（主食・プロテインなど材料がシンプルなものは省略可）
 - 栄養バランス: タンパク質 ${pfc ? `${pfc.proteinLow}〜${pfc.proteinHigh}g` : `${Math.round(goalCalories * 0.15 / 4)}〜${Math.round(goalCalories * 0.20 / 4)}g`}／日、脂質 ${pfc ? `${pfc.fatLow}〜${pfc.fatHigh}g` : `${Math.round(goalCalories * 0.20 / 9)}〜${Math.round(goalCalories * 0.25 / 9)}g`}／日、炭水化物 ${pfc ? `${pfc.carbsLow}〜${pfc.carbsHigh}g` : `${Math.round(goalCalories * 0.55 / 4)}〜${Math.round(goalCalories * 0.65 / 4)}g`}／日 を目安にする
 - 食塩相当量は1日6.5g未満を目安にする（汁物・漬物・加工食品の塩分に注意）
 - 朝食と昼食は5日間で2～3パターンに絞り、同じ献立を繰り返してよい（毎日違う食事にしない）
@@ -124,7 +125,7 @@ function buildPrompt(goalCalories: number, recipes: Recipe[], bento?: BentoSetti
 - 買い物リストの食材総数が50品目以内に収まるよう食材の使い回しを最優先で意識する（同じ食材を複数料理に活用する）${buildRecipeSection(recipes)}${bento ? buildBentoSection(bento) : ''}
 
 必ず以下のJSON形式のみで返答してください（コードブロック・説明文不要）:
-{"days":[{"dayLabel":"1日目（月）","totalCalories":${goalCalories},"breakfast":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"lunch":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"dinner":{"main":{"name":"主菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"},"staple":{"name":"主食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null},"sides":[{"name":"副菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}],"soup":{"name":"汁物名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":"URL or null"}},"snack":[{"name":"間食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"note":"補足 or null"}]},...5日分]}
+{"days":[{"dayLabel":"1日目（月）","totalCalories":${goalCalories},"breakfast":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"ingredients":[{"name":"材料名","amount":"分量"}]}],"lunch":[{"name":"食品名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"ingredients":[{"name":"材料名","amount":"分量"}]}],"dinner":{"main":{"name":"主菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"ingredients":[{"name":"材料名","amount":"分量"}]},"staple":{"name":"主食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"ingredients":null},"sides":[{"name":"副菜名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"ingredients":[{"name":"材料名","amount":"分量"}]}],"soup":{"name":"汁物名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"ingredients":[{"name":"材料名","amount":"分量"}]}},"snack":[{"name":"間食名","calories":数値,"protein":数値,"fat":数値,"carbs":数値,"sodium":数値,"searchUrl":null,"ingredients":null,"note":"補足 or null"}]},...5日分]}
 sodiumは食塩相当量（g）で記載すること。
 dayLabelは${DAY_LABELS.map((l, i) => `${i + 1}日目は"${l}"`).join('、')}とする。`
 }
