@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { Capacitor } from '@capacitor/core'
 import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed, Search, X, ImagePlus } from 'lucide-react'
 import { useRecipeStore } from '../lib/recipedb'
 import { analyzeRecipeIngredients, getApiKey, stripGroupLabels } from '../lib/gemini'
@@ -119,6 +120,7 @@ function RecipeFormModal({
   const [imgRemoved, setImgRemoved] = useState(false)
   const [imgError, setImgError] = useState<string | null>(null)
   const [imgExtractLoading, setImgExtractLoading] = useState(false)
+  const isWeb = Capacitor.getPlatform() === 'web'
 
   const set = (k: keyof FormState, v: string | number) =>
     setF(prev => ({ ...prev, [k]: v }))
@@ -144,7 +146,7 @@ function RecipeFormModal({
     return { kind: 'keep' }
   }
 
-  // カメラ/ギャラリーから画像を選択
+  // カメラ/ギャラリーから画像を選択（ネイティブ）
   const handlePickImage = async () => {
     setImgError(null)
     try {
@@ -162,6 +164,22 @@ function RecipeFormModal({
     } catch {
       // キャンセルは無視
     }
+  }
+
+  // ファイル選択（web: Capacitor CameraはPWA elements未導入で無反応のため input を使う）
+  const handleWebFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setImgError(null)
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const dataUrl = ev.target?.result as string
+      setNewImage({ base64: dataUrl.split(',')[1], mimeType: file.type || 'image/jpeg' })
+      setImgPreview(dataUrl)
+      setImgRemoved(false)
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleRemoveImage = () => {
@@ -294,6 +312,12 @@ function RecipeFormModal({
                 <X size={14} className="text-gray-600" />
               </button>
             </div>
+          ) : isWeb ? (
+            <label className="w-full border-2 border-dashed border-rose-200 rounded-xl py-6 flex flex-col items-center gap-1.5 text-rose-500 hover:bg-rose-100/60 transition cursor-pointer">
+              <ImagePlus size={26} />
+              <span className="text-xs">クリックして写真を選択</span>
+              <input type="file" accept="image/*" className="hidden" onChange={handleWebFileChange} />
+            </label>
           ) : (
             <button
               type="button"
