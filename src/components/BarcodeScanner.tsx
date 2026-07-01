@@ -1,7 +1,15 @@
 import { useState } from 'react'
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
-import { MultiFormatReader, BinaryBitmap, HybridBinarizer, GlobalHistogramBinarizer, RGBLuminanceSource, DecodeHintType } from '@zxing/library'
 import { X, Camera as CameraIcon, Keyboard } from 'lucide-react'
+
+// @zxing/library はバンドルが大きい（~400KB）。端末内蔵の BarcodeDetector で
+// 読めない場合のフォールバックなので、必要になった時だけ動的 import する。
+type ZxingModule = typeof import('@zxing/library')
+let zxingPromise: Promise<ZxingModule> | null = null
+function loadZxing(): Promise<ZxingModule> {
+  if (!zxingPromise) zxingPromise = import('@zxing/library')
+  return zxingPromise
+}
 
 interface Props {
   onDetected: (code: string) => void
@@ -33,7 +41,8 @@ async function decodeWithNativeApi(dataUrl: string): Promise<string | null> {
   }
 }
 
-function decodeWithZxing(canvas: HTMLCanvasElement): string {
+function decodeWithZxing(zxing: ZxingModule, canvas: HTMLCanvasElement): string {
+  const { MultiFormatReader, BinaryBitmap, HybridBinarizer, GlobalHistogramBinarizer, RGBLuminanceSource, DecodeHintType } = zxing
   const { width: w, height: h } = canvas
   const ctx = canvas.getContext('2d')!
   const imageData = ctx.getImageData(0, 0, w, h)
@@ -53,7 +62,8 @@ function decodeWithZxing(canvas: HTMLCanvasElement): string {
   throw new Error('NotFoundException')
 }
 
-function decodeWithZxingFromDataUrl(dataUrl: string): Promise<string> {
+async function decodeWithZxingFromDataUrl(dataUrl: string): Promise<string> {
+  const zxing = await loadZxing()  // 必要になった時点で @zxing を読み込む
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
@@ -66,7 +76,7 @@ function decodeWithZxingFromDataUrl(dataUrl: string): Promise<string> {
         canvas.height = h
         canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
         try {
-          resolve(decodeWithZxing(canvas))
+          resolve(decodeWithZxing(zxing, canvas))
           return
         } catch { /* 次のスケールへ */ }
       }

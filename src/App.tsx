@@ -1,4 +1,4 @@
-import { useEffect, useState, Component } from 'react'
+import { useEffect, useState, Component, lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -18,17 +18,29 @@ import { useAppStore } from './lib/store'
 import { isNative, initAuth, signIn, signInSilent } from './lib/auth'
 import LoginScreen from './components/LoginScreen'
 import Layout from './components/Layout'
-import Home from './pages/Home'
-import Meal from './pages/Meal'
-import Exercise from './pages/Exercise'
-import Body from './pages/Body'
-import Report from './pages/Report'
-import Calendar from './pages/Calendar'
-import Settings from './pages/Settings'
-import MealPlan from './pages/MealPlan'
-import RecipeDB from './pages/RecipeDB'
-import ShoppingList from './pages/ShoppingList'
-import OAuthCallback from './pages/OAuthCallback'
+
+// ── ページはルート単位で遅延読み込み（初回バンドルを分割）──
+// recharts(Report) や @zxing(Meal) など重いライブラリが別チャンクになる
+const Home         = lazy(() => import('./pages/Home'))
+const Meal         = lazy(() => import('./pages/Meal'))
+const Exercise     = lazy(() => import('./pages/Exercise'))
+const Body         = lazy(() => import('./pages/Body'))
+const Report       = lazy(() => import('./pages/Report'))
+const Calendar     = lazy(() => import('./pages/Calendar'))
+const Settings     = lazy(() => import('./pages/Settings'))
+const MealPlan     = lazy(() => import('./pages/MealPlan'))
+const RecipeDB     = lazy(() => import('./pages/RecipeDB'))
+const ShoppingList = lazy(() => import('./pages/ShoppingList'))
+const OAuthCallback = lazy(() => import('./pages/OAuthCallback'))
+
+// 遅延読み込み中のフォールバック
+function PageLoading() {
+  return (
+    <div className="flex items-center justify-center py-20 text-sm text-gray-400">
+      読み込み中...
+    </div>
+  )
+}
 
 export default function App() {
   const { isAuthenticated, setAuthenticated, loadData } = useAppStore()
@@ -64,6 +76,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <HashRouter>
+      <Suspense fallback={<PageLoading />}>
       <Routes>
         {/* GitHub Pages経由のOAuthコールバック */}
         <Route path="/oauth-callback" element={<OAuthCallback />} />
@@ -90,6 +103,7 @@ export default function App() {
             )
         } />
       </Routes>
+      </Suspense>
     </HashRouter>
     </ErrorBoundary>
   )
