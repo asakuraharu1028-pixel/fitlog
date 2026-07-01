@@ -1,11 +1,19 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed, Search, X } from 'lucide-react'
+import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed, Search, X, ImagePlus } from 'lucide-react'
 import { useRecipeStore } from '../lib/recipedb'
 import { analyzeRecipeIngredients, getApiKey, stripGroupLabels } from '../lib/gemini'
-import { fetchRecipeFromUrl } from '../lib/recipefetch'
+import { fetchRecipeFromUrl, extractRecipeFromImage } from '../lib/recipefetch'
+import { uploadImageToDrive, loadImageUrlFromDrive, deleteFileFromDrive } from '../lib/google'
 import type { Recipe, RecipeCategory, RecipeIngredient } from '../types'
 import type { AiFoodResult } from '../lib/gemini'
+
+// 画像本体は別Driveファイルで保存する。保存時に反映すべき変更内容を表す
+type PendingImage =
+  | { kind: 'keep' }
+  | { kind: 'set'; base64: string; mimeType: string }
+  | { kind: 'remove' }
 
 function recipeToEntry(r: Recipe): AiFoodResult {
   return {
@@ -57,6 +65,7 @@ const EMPTY_FORM = {
   ingredientsText:  '',   // 材料入力テキスト（改行区切り）
   note:             '',
   sourceUrl:        '',
+  imageFileId:      '',    // 既存レシピの画像ファイルID（保存済み）
 }
 
 type FormState = typeof EMPTY_FORM
@@ -80,6 +89,7 @@ function toFormState(r: Recipe): FormState {
     ingredientsText: stripGroupLabels(ingredientsToText(r.ingredients)),
     note:            r.note ?? '',
     sourceUrl:       r.sourceUrl ?? '',
+    imageFileId:     r.imageFileId ?? '',
   }
 }
 
@@ -91,7 +101,7 @@ function RecipeFormModal({
   isSaving,
 }: {
   initial: FormState
-  onSave: (f: FormState) => void
+  onSave: (f: FormState, image: PendingImage) => void
   onCancel: () => void
   isSaving: boolean
 }) {
@@ -102,11 +112,84 @@ function RecipeFormModal({
   const [urlLoading, setUrlLoading] = useState(false)
   const [urlError, setUrlError] = useState<string | null>(null)
 
+  // ── 画像状態 ──
+  // newImage: 新しく選んだ画像（未保存）。imgPreview: プレビュー表示用URL。
+  const [newImage, setNewImage] = useState<{ base64: string; mimeType: string } | null>(null)
+  const [imgPreview, setImgPreview] = useState<string | null>(null)
+  const [imgRemoved, setImgRemoved] = useState(false)
+  const [imgError, setImgError] = useState<string | null>(null)
+  const [imgExtractLoading, setImgExtractLoading] = useState(false)
+
   const set = (k: keyof FormState, v: string | number) =>
     setF(prev => ({ ...prev, [k]: v }))
 
   const hasApiKey = !!getApiKey()
   const valid = f.name.trim() !== '' && f.calories >= 0
+
+  // 編集時、既存の保存済み画像をDriveから読み込んでプレビュー表示
+  useEffect(() => {
+    if (!initial.imageFileId) return
+    let revoked = false
+    let url: string | null = null
+    loadImageUrlFromDrive(initial.imageFileId)
+      .then(u => { if (!revoked) { url = u; setImgPreview(u) } })
+      .catch(() => { /* 表示できなくても致命的ではない */ })
+    return () => { revoked = true; if (url) URL.revokeObjectURL(url) }
+  }, [initial.imageFileId])
+
+  // 保存時に渡す画像変更内容を組み立てる
+  const buildPendingImage = (): PendingImage => {
+    if (newImage) return { kind: 'set', base64: newImage.base64, mimeType: newImage.mimeType }
+    if (imgRemoved && initial.imageFileId) return { kind: 'remove' }
+    return { kind: 'keep' }
+  }
+
+  // カメラ/ギャラリーから画像を選択
+  const handlePickImage = async () => {
+    setImgError(null)
+    try {
+      const photo = await CapCamera.getPhoto({
+        quality: 80,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Prompt,
+        correctOrientation: true,
+      })
+      if (!photo.dataUrl) return
+      setNewImage({ base64: photo.dataUrl.split(',')[1], mimeType: `image/${photo.format}` })
+      setImgPreview(photo.dataUrl)
+      setImgRemoved(false)
+    } catch {
+      // キャンセルは無視
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setNewImage(null)
+    setImgPreview(null)
+    setImgRemoved(true)
+  }
+
+  // 選択中の画像からAIで料理名・材料を読み取ってフォームに反映
+  const handleExtractFromImage = async () => {
+    if (!newImage) return
+    setImgExtractLoading(true)
+    setImgError(null)
+    try {
+      const fetched = await extractRecipeFromImage(newImage.base64, newImage.mimeType)
+      setF(prev => ({
+        ...prev,
+        name:            prev.name || fetched.name,
+        servings:        fetched.servings,
+        ingredientsText: fetched.ingredientsText,
+        note:            prev.note || fetched.note,
+      }))
+    } catch (e) {
+      setImgError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setImgExtractLoading(false)
+    }
+  }
 
   const handleFetchUrl = async () => {
     if (!f.sourceUrl.trim()) return
@@ -190,6 +273,57 @@ function RecipeFormModal({
           {urlError && <p className="text-xs text-red-500">{urlError}</p>}
           <p className="text-[10px] text-blue-500">
             URLを入力して「取得」を押すと料理名・材料を自動入力します
+          </p>
+        </div>
+
+        {/* レシピ画像 → 情報取得＆画像保存 */}
+        <div className="bg-rose-50 border border-rose-100 rounded-2xl p-3 space-y-2">
+          <div className="flex items-center gap-1.5">
+            <ImagePlus size={14} className="text-rose-500" />
+            <label className="text-xs font-semibold text-rose-700">レシピ画像（任意）</label>
+          </div>
+
+          {imgPreview ? (
+            <div className="relative">
+              <img src={imgPreview} alt="レシピ" className="w-full rounded-xl object-cover max-h-48" />
+              <button
+                type="button"
+                onClick={handleRemoveImage}
+                className="absolute top-2 right-2 bg-white rounded-full p-1 shadow"
+              >
+                <X size={14} className="text-gray-600" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handlePickImage}
+              className="w-full border-2 border-dashed border-rose-200 rounded-xl py-6 flex flex-col items-center gap-1.5 text-rose-500 hover:bg-rose-100/60 transition"
+            >
+              <ImagePlus size={26} />
+              <span className="text-xs">タップして写真を選択</span>
+            </button>
+          )}
+
+          {/* 新しく選んだ画像のみAI読み取り可能（保存済み画像はテキスト化済みの想定）*/}
+          {newImage && (
+            hasApiKey ? (
+              <button
+                type="button"
+                onClick={handleExtractFromImage}
+                disabled={imgExtractLoading}
+                className="w-full flex items-center justify-center gap-2 bg-rose-500 text-white rounded-xl py-2 text-xs font-bold disabled:opacity-40 hover:bg-rose-600 transition"
+              >
+                <Sparkles size={13} className={imgExtractLoading ? 'animate-pulse' : ''} />
+                {imgExtractLoading ? 'AI読み取り中...' : 'この画像から料理名・材料を読み取る'}
+              </button>
+            ) : (
+              <p className="text-xs text-rose-600 text-center">設定でAPIキーを登録するとAI読み取りが使えます</p>
+            )
+          )}
+          {imgError && <p className="text-xs text-red-500">{imgError}</p>}
+          <p className="text-[10px] text-rose-500">
+            写真を選ぶとAIで材料を読み取れます。画像はレシピと一緒に保存され、あとで見返せます
           </p>
         </div>
 
@@ -339,7 +473,7 @@ function RecipeFormModal({
           </button>
           <button
             type="button"
-            onClick={() => valid && onSave(f)}
+            onClick={() => valid && onSave(f, buildPendingImage())}
             disabled={!valid || isSaving}
             className="flex-1 bg-green-500 text-white rounded-xl py-3 text-sm font-bold disabled:opacity-40 hover:bg-green-600 transition"
           >
@@ -349,6 +483,24 @@ function RecipeFormModal({
       </div>
     </div>
   )
+}
+
+// ── Drive上の画像を遅延ロードして表示 ─────────────────────────
+function DriveImage({ fileId }: { fileId: string }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let revoked = false
+    let objUrl: string | null = null
+    loadImageUrlFromDrive(fileId)
+      .then(u => { if (!revoked) { objUrl = u; setUrl(u) } })
+      .catch(() => {})
+    return () => { revoked = true; if (objUrl) URL.revokeObjectURL(objUrl) }
+  }, [fileId])
+
+  if (!url) {
+    return <div className="w-full h-32 rounded-xl bg-gray-100 animate-pulse" />
+  }
+  return <img src={url} alt="レシピ" className="w-full rounded-xl object-cover max-h-48" />
 }
 
 // ── レシピカード ──────────────────────────────────────────────
@@ -405,6 +557,9 @@ function RecipeCard({
 
       {!selectable && open && (
         <div className="border-t border-gray-100 px-4 py-3 space-y-3">
+          {/* レシピ画像 */}
+          {recipe.imageFileId && <DriveImage fileId={recipe.imageFileId} />}
+
           {/* 栄養 */}
           <div className="flex gap-4 text-xs text-gray-500">
             <span>P <b className="text-blue-500">{recipe.protein}g</b></span>
@@ -554,14 +709,32 @@ export default function RecipeDBPage() {
       ingredients: ingredients.length > 0 ? ingredients : undefined,
       note:        f.note.trim() || undefined,
       sourceUrl:   f.sourceUrl.trim() || undefined,
+      imageFileId: f.imageFileId || undefined,
     }
   }
 
-  const handleSave = async (f: FormState) => {
+  const handleSave = async (f: FormState, image: PendingImage) => {
+    // 画像の反映（アップロード／削除）を先に確定し、fileIdをレシピに載せる
+    let imageFileId = f.imageFileId || undefined
+    try {
+      if (image.kind === 'set') {
+        imageFileId = await uploadImageToDrive(image.base64, image.mimeType)
+        // 差し替え時は古い画像を削除（失敗しても保存は続行）
+        if (f.imageFileId) await deleteFileFromDrive(f.imageFileId).catch(() => {})
+      } else if (image.kind === 'remove') {
+        if (f.imageFileId) await deleteFileFromDrive(f.imageFileId).catch(() => {})
+        imageFileId = undefined
+      }
+    } catch {
+      // 画像アップロード失敗時は画像なしで保存を続行
+      imageFileId = f.imageFileId || undefined
+    }
+
+    const recipe = { ...formStateToRecipe(f), imageFileId }
     if (editTarget) {
-      await updateRecipe(editTarget.id, formStateToRecipe(f))
+      await updateRecipe(editTarget.id, recipe)
     } else {
-      await addRecipe(formStateToRecipe(f))
+      await addRecipe(recipe)
     }
     setShowForm(false)
     setEditTarget(null)
@@ -574,6 +747,9 @@ export default function RecipeDBPage() {
 
   const handleDelete = async (id: string) => {
     if (window.confirm('このレシピを削除しますか？')) {
+      // 紐づく画像ファイルも削除（失敗しても本体削除は続行）
+      const target = db.recipes.find(r => r.id === id)
+      if (target?.imageFileId) await deleteFileFromDrive(target.imageFileId).catch(() => {})
       await deleteRecipe(id)
     }
   }

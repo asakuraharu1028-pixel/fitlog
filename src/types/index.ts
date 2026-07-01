@@ -95,6 +95,7 @@ export interface Recipe {
   ingredients?: RecipeIngredient[]  // 材料リスト
   note?: string
   sourceUrl?: string
+  imageFileId?: string        // Drive上のレシピ画像ファイルID（本体は別ファイルで保存）
   createdAt: string           // ISO8601
   updatedAt: string           // ISO8601
 }

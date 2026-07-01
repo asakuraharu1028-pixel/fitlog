@@ -134,6 +134,45 @@ export async function saveFileToDrive<T>(name: string, data: T): Promise<void> {
   }
 }
 
+// ── 画像などバイナリファイル ─────────────────────────────────
+// base64文字列を appDataFolder に新規アップロードし、ファイルIDを返す
+export async function uploadImageToDrive(base64: string, mimeType: string): Promise<string> {
+  if (!accessToken) throw new Error('Not authenticated')
+  // base64 → Blob
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  const blob = new Blob([bytes], { type: mimeType })
+
+  const ext = mimeType.split('/')[1] || 'jpg'
+  const meta = JSON.stringify({ name: `recipe-img-${crypto.randomUUID()}.${ext}`, parents: ['appDataFolder'] })
+  const form = new FormData()
+  form.append('metadata', new Blob([meta], { type: 'application/json' }))
+  form.append('file', blob)
+  const res = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+    { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: form }
+  )
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Drive image upload error: ${res.status} - ${text}`)
+  }
+  const data = await res.json()
+  return data.id as string
+}
+
+// ファイルID のバイナリを取得して表示用の Blob URL を返す
+export async function loadImageUrlFromDrive(fileId: string): Promise<string> {
+  const res = await driveRequest(`/files/${fileId}?alt=media`)
+  const blob = await res.blob()
+  return URL.createObjectURL(blob)
+}
+
+// ファイルを削除する（レシピ削除・画像差し替え時）
+export async function deleteFileFromDrive(fileId: string): Promise<void> {
+  await driveRequest(`/files/${fileId}`, { method: 'DELETE' })
+}
+
 // ── fitlog-data.json（既存） ──────────────────────────────────
 export async function loadFromDrive<T>(): Promise<T | null> {
   const fileId = await findDataFile()

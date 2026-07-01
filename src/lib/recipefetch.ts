@@ -160,6 +160,88 @@ ${text}`
   }
 }
 
+// ── レシピ画像からAIで抽出 ────────────────────────────────────
+const IMAGE_PROMPT = `あなたは料理アシスタントです。レシピの画像（レシピカード・書籍・手書きメモ・スクリーンショット等）から情報を読み取ってください。
+必ず以下のJSON形式のみで返答してください（説明文不要）:
+{"name":"料理名","servings":人数の数値,"ingredients":["材料1 量1","材料2 量2",...],"note":"料理の説明や手順の概要（100文字以内）"}
+- 人数が読み取れない場合は1とする
+- 材料は「食材名 分量」の形式で1行ずつ返す`
+
+export async function extractRecipeFromImage(base64: string, mimeType: string): Promise<FetchedRecipe> {
+  const apiKey = getApiKey()
+  if (!apiKey) throw new Error('画像から読み取るにはAPIキーを設定してください')
+
+  const isOpenRouter = apiKey.startsWith('sk-or-')
+  let responseText: string
+
+  if (isOpenRouter) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'google/gemma-4-31b-it:free',
+        messages: [
+          { role: 'system', content: IMAGE_PROMPT },
+          {
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+              { type: 'text', text: 'このレシピ画像から料理名・人数・材料を読み取ってください。' },
+            ],
+          },
+        ],
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error((err as { error?: { message?: string } }).error?.message ?? `APIエラー ${res.status}`)
+    }
+    const data = await res.json()
+    responseText = data.choices?.[0]?.message?.content ?? ''
+  } else {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: mimeType, data: base64 } },
+              { text: `${IMAGE_PROMPT}\nこのレシピ画像から料理名・人数・材料を読み取ってください。` },
+            ],
+          }],
+          generationConfig: { responseMimeType: 'application/json' },
+        }),
+      }
+    )
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error((err as { error?: { message?: string } }).error?.message ?? `APIエラー ${res.status}`)
+    }
+    const data = await res.json()
+    responseText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  }
+
+  const m = responseText.match(/\{[\s\S]*\}/)
+  if (!m) throw new Error('AIからの応答を解析できませんでした')
+
+  const parsed = JSON.parse(m[0]) as {
+    name?: string
+    servings?: number
+    ingredients?: string[]
+    note?: string
+  }
+
+  return {
+    name:            parsed.name ?? '',
+    servings:        parsed.servings ?? 1,
+    ingredientsText: stripGroupLabels((parsed.ingredients ?? []).join('\n')),
+    note:            parsed.note ?? '',
+    sourceUrl:       '',
+  }
+}
+
 // ── メインエントリ ────────────────────────────────────────────
 export async function fetchRecipeFromUrl(url: string): Promise<FetchedRecipe> {
   const html = await fetchHtml(url)
