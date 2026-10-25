@@ -1,58 +1,16 @@
-import { getApiKey } from './gemini'
+import { generateText, hasAiKey } from './ai'
 import { localDateStr } from './utils'
 import { getCharacter } from './characters'
 import { useRecipeStore } from './recipedb'
 import type { MealLog, CardioLog, StrengthLog, AppData } from '../types'
-
-function isOpenRouterKey(key: string) {
-  return key.startsWith('sk-or-')
-}
 
 function getSystemPrompt(data: AppData): string {
   return getCharacter(data.settings.advisorCharacter).systemPrompt
 }
 
 async function callAI(prompt: string, data: AppData, systemPromptOverride?: string): Promise<string> {
-  const apiKey = getApiKey()
-  if (!apiKey) return ''
-  const systemPrompt = systemPromptOverride ?? getSystemPrompt(data)
-
-  if (isOpenRouterKey(apiKey)) {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemma-4-26b-a4b-it:free',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(`OpenRouter エラー ${res.status}: ${err?.error?.message ?? res.statusText}`)
-    }
-    const d = await res.json()
-    return (d.choices?.[0]?.message?.content ?? '').trim()
-  }
-
-  // Gemini
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ parts: [{ text: prompt }] }],
-    }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(`Gemini エラー ${res.status}: ${err?.error?.message ?? res.statusText}`)
-  }
-  const d = await res.json()
-  return (d.candidates?.[0]?.content?.parts?.[0]?.text ?? '').trim()
+  if (!hasAiKey()) return ''
+  return generateText({ system: systemPromptOverride ?? getSystemPrompt(data), prompt })
 }
 
 function stepsToCalories(steps: number, weightKg?: number): number {
@@ -88,8 +46,7 @@ const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'] as const
 type MealTypeKey = typeof MEAL_ORDER[number]
 
 export async function getMealAdvice(meal: MealLog, data: AppData): Promise<string> {
-  const apiKey = getApiKey()
-  if (!apiKey) return ''
+  if (!hasAiKey()) return ''
 
   const goal = data.settings.goalCalories ?? 2000
   const { intake, burned, remaining, steps, stepCalories } = todayCalorieSummary(data, goal)
@@ -140,8 +97,7 @@ ${pfcTargetLine}
 }
 
 export async function getMealSuggestion(data: AppData): Promise<string> {
-  const apiKey = getApiKey()
-  if (!apiKey) return ''
+  if (!hasAiKey()) return ''
 
   const today = localDateStr()
   const goal = data.settings.goalCalories ?? 2000
@@ -189,8 +145,7 @@ ${registeredSummary}
 }
 
 export async function getCardioAdvice(log: CardioLog, data: AppData): Promise<string> {
-  const apiKey = getApiKey()
-  if (!apiKey) return ''
+  if (!hasAiKey()) return ''
 
   const goal = data.settings.goalCalories ?? 2000
   const { intake, burned, steps, stepCalories } = todayCalorieSummary(data, goal)
@@ -206,8 +161,7 @@ export async function getCardioAdvice(log: CardioLog, data: AppData): Promise<st
 }
 
 export async function getStrengthAdvice(log: StrengthLog, data: AppData): Promise<string> {
-  const apiKey = getApiKey()
-  if (!apiKey) return ''
+  if (!hasAiKey()) return ''
 
   const setsStr = log.sets.map((s, i) => `${i + 1}セット目: ${s.weight}kg × ${s.reps}回`).join(', ')
 
@@ -239,7 +193,7 @@ function dayStats(data: AppData, date: string) {
 }
 
 export async function getDailyAdvice(data: AppData): Promise<{ advice: string; score: number }> {
-  if (!getApiKey()) return { advice: '', score: 0 }
+  if (!hasAiKey()) return { advice: '', score: 0 }
   const today = localDateStr()
   const s = dayStats(data, today)
   const goal = data.settings.goalCalories ?? 2000
@@ -272,7 +226,7 @@ ${pfcTargetLine}
 }
 
 export async function getWeeklyAdvice(data: AppData): Promise<string> {
-  if (!getApiKey()) return ''
+  if (!hasAiKey()) return ''
   const today = new Date()
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today)

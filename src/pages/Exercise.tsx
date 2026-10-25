@@ -7,7 +7,7 @@ import {
   calcCardioCalories, calcStrengthCalories, calcVolume, calcTreadmillMet,
 } from '../lib/exercisedb'
 import { getCardioAdvice, getStrengthAdvice } from '../lib/advice'
-import { getApiKey } from '../lib/gemini'
+import { hasAiKey } from '../lib/ai'
 import type { CardioLog, StrengthLog } from '../types'
 import { nanoid } from 'nanoid'
 import { Plus, Trash2, ChevronDown, ChevronUp, Flame, Dumbbell, Sparkles, X } from 'lucide-react'
@@ -44,7 +44,7 @@ export default function Exercise() {
   const [adviceLoading, setAdviceLoading] = useState(false)
   const [lastSavedLog, setLastSavedLog] = useState<CardioLog | StrengthLog | null>(null)
   const [lastSavedType, setLastSavedType] = useState<'cardio' | 'strength' | null>(null)
-  const hasApiKey = !!getApiKey()
+  const hasApiKey = hasAiKey()
 
   // 展開
   const [expandedId, setExpandedId] = useState<string | null>(null)

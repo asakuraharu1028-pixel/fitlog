@@ -1,4 +1,4 @@
-import { getApiKey } from './gemini'
+import { callAi } from './ai'
 import { loadFileFromDrive, saveFileToDrive } from './google'
 import type { WeeklyMealPlan, DayMealPlan, Recipe, RecipeCategory } from '../types'
 import { nanoid } from 'nanoid'
@@ -31,10 +31,6 @@ async function appendToHistory(plan: WeeklyMealPlan): Promise<void> {
   const history = await loadMealPlanHistory()
   const updated = [plan, ...history].slice(0, HISTORY_MAX)
   await saveFileToDrive(MEALPLAN_HISTORY_FILE, updated)
-}
-
-function isOpenRouterKey(key: string) {
-  return key.startsWith('sk-or-')
 }
 
 const DAY_LABELS = ['1日目（月）', '2日目（火）', '3日目（水）', '4日目（木）', '5日目（金）']
@@ -130,70 +126,21 @@ sodiumは食塩相当量（g）で記載すること。
 dayLabelは${DAY_LABELS.map((l, i) => `${i + 1}日目は"${l}"`).join('、')}とする。`
 }
 
-async function callGemini(apiKey: string, prompt: string): Promise<DayMealPlan[]> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json' },
-    }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { error?: { message?: string } }).error?.message ?? `APIエラー ${res.status}`)
-  }
-  const data = await res.json()
-  const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-  const match = text.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error('AIからの応答を解析できませんでした')
-  const parsed = JSON.parse(match[0]) as { days: DayMealPlan[] }
-  return parsed.days
-}
-
-async function callOpenRouter(apiKey: string, prompt: string): Promise<DayMealPlan[]> {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemma-4-31b-it:free',
-      messages: [
-        { role: 'user', content: prompt },
-      ],
-      response_format: { type: 'json_object' },
-    }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error((err as { error?: { message?: string } }).error?.message ?? `APIエラー ${res.status}`)
-  }
-  const data = await res.json()
-  const text: string = data.choices?.[0]?.message?.content ?? ''
-  const match = text.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error('AIからの応答を解析できませんでした')
-  const parsed = JSON.parse(match[0]) as { days: DayMealPlan[] }
-  return parsed.days
-}
-
 export async function generateWeeklyMealPlan(
   goalCalories: number,
   recipes: Recipe[] = [],
   bento?: BentoSettings,
   pfc?: PFCTargets
 ): Promise<WeeklyMealPlan> {
-  const apiKey = getApiKey()
-  if (!apiKey) throw new Error('APIキーが設定されていません')
-
   const prompt = buildPrompt(goalCalories, recipes, bento, pfc)
-  const days = isOpenRouterKey(apiKey)
-    ? await callOpenRouter(apiKey, prompt)
-    : await callGemini(apiKey, prompt)
-
-  if (!Array.isArray(days) || days.length === 0) throw new Error('献立データを取得できませんでした')
+  // 献立が空なら失敗扱いにして、次のプロバイダーに切り替える
+  const days = await callAi({ prompt, json: true }, text => {
+    const match = text.match(/\{[\s\S]*\}/)
+    if (!match) throw new Error('AIからの応答を解析できませんでした')
+    const parsed = JSON.parse(match[0]) as { days?: DayMealPlan[] }
+    if (!Array.isArray(parsed.days) || parsed.days.length === 0) throw new Error('献立データを取得できませんでした')
+    return parsed.days
+  })
 
   // 既存プランを履歴に退避してから新プランを保存
   const existing = await loadSavedMealPlan()

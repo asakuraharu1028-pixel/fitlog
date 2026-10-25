@@ -1,4 +1,5 @@
-import { getApiKey, stripGroupLabels } from './gemini'
+import { stripGroupLabels } from './gemini'
+import { generateJson, hasAiKey } from './ai'
 
 export interface FetchedRecipe {
   name: string
@@ -96,10 +97,16 @@ function parseServings(raw: string | number | string[] | undefined): number {
   return isNaN(n) || n < 1 ? 1 : n
 }
 
-// ── ページテキストをGeminiで解析（フォールバック）─────────────
+interface ExtractedRecipe {
+  name?: string
+  servings?: number
+  ingredients?: string[]
+  note?: string
+}
+
+// ── ページテキストをAIで解析（フォールバック）─────────────
 async function extractByAI(html: string, url: string): Promise<FetchedRecipe> {
-  const apiKey = getApiKey()
-  if (!apiKey) throw new Error('Schema.orgデータが見つかりません。AIを使うにはAPIキーを設定してください')
+  if (!hasAiKey()) throw new Error('Schema.orgデータが見つかりません。AIを使うにはAPIキーを設定してください')
 
   // HTMLタグを除去してテキストのみ抽出（長すぎる場合は先頭5000文字）
   const text = html.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 5000)
@@ -111,45 +118,7 @@ async function extractByAI(html: string, url: string): Promise<FetchedRecipe> {
 テキスト:
 ${text}`
 
-  const isOpenRouter = apiKey.startsWith('sk-or-')
-  let responseText: string
-
-  if (isOpenRouter) {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemma-4-31b-it:free',
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    })
-    const data = await res.json()
-    responseText = data.choices?.[0]?.message?.content ?? ''
-  } else {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' },
-        }),
-      }
-    )
-    const data = await res.json()
-    responseText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-  }
-
-  const m = responseText.match(/\{[\s\S]*\}/)
-  if (!m) throw new Error('AIからの応答を解析できませんでした')
-
-  const parsed = JSON.parse(m[0]) as {
-    name?: string
-    servings?: number
-    ingredients?: string[]
-    note?: string
-  }
+  const parsed = await generateJson<ExtractedRecipe>({ prompt }, 'object')
 
   return {
     name:            parsed.name ?? '',
@@ -168,70 +137,13 @@ const IMAGE_PROMPT = `あなたは料理アシスタントです。レシピの�
 - 材料は「食材名 分量」の形式で1行ずつ返す`
 
 export async function extractRecipeFromImage(base64: string, mimeType: string): Promise<FetchedRecipe> {
-  const apiKey = getApiKey()
-  if (!apiKey) throw new Error('画像から読み取るにはAPIキーを設定してください')
+  if (!hasAiKey()) throw new Error('画像から読み取るにはAPIキーを設定してください')
 
-  const isOpenRouter = apiKey.startsWith('sk-or-')
-  let responseText: string
-
-  if (isOpenRouter) {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemma-4-31b-it:free',
-        messages: [
-          { role: 'system', content: IMAGE_PROMPT },
-          {
-            role: 'user',
-            content: [
-              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-              { type: 'text', text: 'このレシピ画像から料理名・人数・材料を読み取ってください。' },
-            ],
-          },
-        ],
-      }),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error((err as { error?: { message?: string } }).error?.message ?? `APIエラー ${res.status}`)
-    }
-    const data = await res.json()
-    responseText = data.choices?.[0]?.message?.content ?? ''
-  } else {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { inline_data: { mime_type: mimeType, data: base64 } },
-              { text: `${IMAGE_PROMPT}\nこのレシピ画像から料理名・人数・材料を読み取ってください。` },
-            ],
-          }],
-          generationConfig: { responseMimeType: 'application/json' },
-        }),
-      }
-    )
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error((err as { error?: { message?: string } }).error?.message ?? `APIエラー ${res.status}`)
-    }
-    const data = await res.json()
-    responseText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-  }
-
-  const m = responseText.match(/\{[\s\S]*\}/)
-  if (!m) throw new Error('AIからの応答を解析できませんでした')
-
-  const parsed = JSON.parse(m[0]) as {
-    name?: string
-    servings?: number
-    ingredients?: string[]
-    note?: string
-  }
+  const parsed = await generateJson<ExtractedRecipe>({
+    system: IMAGE_PROMPT,
+    prompt: 'このレシピ画像から料理名・人数・材料を読み取ってください。',
+    image: { base64, mimeType },
+  }, 'object')
 
   return {
     name:            parsed.name ?? '',

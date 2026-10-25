@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
-import { getApiKey } from '../lib/gemini'
+import { hasAiKey } from '../lib/ai'
 import type { AdviceLog } from '../types'
 import { computeTrophies, TIER_COLORS } from '../lib/trophies'
+import { computeStreak, type DayStatus } from '../lib/streak'
 import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy } from 'lucide-react'
 import type { AppData } from '../types'
 
@@ -72,7 +73,7 @@ export default function Home() {
   const goalCarbsLow    = Math.round(Math.max(0, goal - goalProteinHigh * 4 - goalFatHigh * 9) / 4)
   const goalCarbsHigh   = Math.round(Math.max(0, goal - goalProteinLow  * 4 - goalFatLow  * 9) / 4)
 
-  const hasApiKey = !!getApiKey()
+  const hasApiKey = hasAiKey()
 
   // アドバイス
   const [dailyAdvice,   setDailyAdvice]   = useState<string | null>(null)
@@ -127,6 +128,9 @@ export default function Home() {
           })}
         </p>
       </div>
+
+      {/* 連続記録 */}
+      <StreakCard data={data} today={today} />
 
       {/* カロリーサマリー */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
@@ -432,6 +436,63 @@ function TrophySection({ data }: { data: AppData }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+const DAY_STATUS_STYLE: Record<DayStatus, string> = {
+  recorded: 'bg-orange-400 text-white',
+  frozen:   'bg-sky-100 text-sky-500',
+  missed:   'bg-gray-100 text-gray-300',
+  pending:  'border-2 border-dashed border-orange-300 text-orange-400',
+}
+
+function StreakCard({ data, today }: { data: AppData; today: string }) {
+  const streak = computeStreak(data, today)
+  const weekday = (date: string) =>
+    new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', { weekday: 'short' })
+
+  let message: string
+  if (streak.todayRecorded) {
+    message = '今日も記録済み！この調子で続けよう'
+  } else if (streak.current > 0) {
+    message = `今日なにか1件記録すると ${streak.current + 1}日 に伸びます`
+  } else {
+    message = '何か1件記録すれば、今日から連続記録スタート'
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-end gap-1">
+          <span className="text-3xl">🔥</span>
+          <span className="text-3xl font-bold text-orange-500">{streak.current}</span>
+          <span className="text-sm text-gray-500 mb-1">日連続記録</span>
+        </div>
+        <div className="text-right text-xs text-gray-400 space-y-0.5">
+          <p>最長 {streak.best}日</p>
+          <p title="記録できなかった日を週1回まで自動でカバーします">
+            🧊 フリーズ 残り{streak.freezesLeftThisWeek}回/週
+          </p>
+        </div>
+      </div>
+
+      <div className="flex justify-between mt-3">
+        {streak.recent.map(({ date, status }) => (
+          <div key={date} className="flex flex-col items-center gap-1">
+            <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${DAY_STATUS_STYLE[status]}`}>
+              {status === 'recorded' ? '✓' : status === 'frozen' ? '🧊' : ''}
+            </span>
+            <span className={`text-[10px] ${date === today ? 'text-orange-500 font-bold' : 'text-gray-400'}`}>
+              {date === today ? '今日' : weekday(date)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <p className={`text-xs mt-3 ${streak.todayRecorded ? 'text-green-600' : 'text-orange-500 font-semibold'}`}>
+        {message}
+      </p>
     </div>
   )
 }

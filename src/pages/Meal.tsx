@@ -5,7 +5,8 @@ import { Capacitor } from '@capacitor/core'
 import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import DateSelector from '../components/DateSelector'
-import { analyzeFoodText, analyzeFoodImage, analyzeFoodLabel, getApiKey, type AiFoodResult } from '../lib/gemini'
+import { analyzeFoodText, analyzeFoodImage, analyzeFoodLabel, type AiFoodResult } from '../lib/gemini'
+import { hasAiKey } from '../lib/ai'
 import { lookupBarcode, BarcodeNotFoundError, submitToOpenFoodFacts, toPer100g } from '../lib/barcode'
 import { getMealAdvice, getMealSuggestion } from '../lib/advice'
 import type { MealLog, FoodEntry, TemplateFoodItem, AdviceLog } from '../types'
@@ -375,7 +376,7 @@ export default function Meal() {
   const [editingTemplate, setEditingTemplate] = useState<TemplateFoodItem | null>(null)
   const [newTemplate, setNewTemplate] = useState(false)
 
-  const hasApiKey = !!getApiKey()
+  const hasApiKey = hasAiKey()
   const templateFoods = data.templateFoods ?? []
 
   // MealPlan / RecipeDB からの遷移でエントリを受け取る

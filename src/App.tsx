@@ -16,6 +16,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: string |
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { useAppStore } from './lib/store'
 import { isNative, initAuth, signIn, signInSilent } from './lib/auth'
+import { initReminderListeners } from './lib/reminders'
 import LoginScreen from './components/LoginScreen'
 import Layout from './components/Layout'
 
@@ -48,6 +49,7 @@ export default function App() {
 
   useEffect(() => {
     if (isNative) {
+      initReminderListeners()
       initAuth().then(() => {
         signInSilent().then((token) => {
           if (token) { setAuthenticated(true); loadData() }

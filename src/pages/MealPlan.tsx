@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronUp, ExternalLink, RefreshCw, ArrowLeft, Sparkles, BookOpen, Plus, ShoppingCart } from 'lucide-react'
 import { useAppStore } from '../lib/store'
-import { getApiKey } from '../lib/gemini'
+import { hasAiKey } from '../lib/ai'
 import { generateWeeklyMealPlan, loadSavedMealPlan, loadMealPlanHistory } from '../lib/mealplan'
 import type { BentoSettings, PFCTargets } from '../lib/mealplan'
 import { useRecipeStore } from '../lib/recipedb'
@@ -300,7 +300,7 @@ export default function MealPlan() {
   const navigate = useNavigate()
   const { data } = useAppStore()
   const { db: recipeDB, loadDB } = useRecipeStore()
-  const hasApiKey = !!getApiKey()
+  const hasApiKey = hasAiKey()
 
   useEffect(() => { loadDB() }, [loadDB])
 

@@ -3,6 +3,7 @@ import type { AppData, StepLog, SleepLog } from '../types'
 import { loadFromDrive, saveToDrive } from './google'
 import { localDateStr } from './utils'
 import { syncWidgetData } from './widget'
+import { syncReminders } from './reminders'
 
 // id フィールドを持つレコードをマージ（ローカル優先、どちらにしかないものも保持）
 function mergeById<T extends { id: string }>(local: T[], remote: T[]): T[] {
@@ -144,7 +145,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   loadData: async () => {
     // ローカルデータを即時ウィジェットに反映（オフライン時も表示される）
     const local = loadFromLocal()
-    if (local) syncWidgetData(local)
+    if (local) { syncWidgetData(local); syncReminders(local) }
 
     set({ isLoading: true, driveError: null })
     try {
@@ -157,6 +158,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         set({ data: merged })
         saveToLocal(merged)
         syncWidgetData(merged)
+        syncReminders(merged)
         // マージ結果を Drive にも書き戻す（ローカルのみのレコードを反映）
         saveToDrive(merged).catch((e) => console.warn('Drive write-back error:', e))
       }
@@ -174,6 +176,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ data: next, isSaving: true, driveError: null })
     saveToLocal(next)
     syncWidgetData(next)
+    syncReminders(next)
     try {
       await saveToDrive(next)
     } catch (e) {

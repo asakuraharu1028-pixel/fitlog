@@ -208,6 +208,14 @@ export interface PeriodLog {
   notes?: string
 }
 
+export type ReminderKind = 'weight' | 'breakfast' | 'lunch' | 'dinner' | 'streak'
+
+export interface ReminderSettings {
+  enabled: boolean
+  /** 種類ごとの ON/OFF と通知時刻（HH:MM） */
+  items: Partial<Record<ReminderKind, { enabled: boolean; time: string }>>
+}
+
 export interface AppData {
   bodyRecords: BodyRecord[]
   mealLogs: MealLog[]
@@ -238,5 +246,7 @@ export interface AppData {
     /** 活動レベル */
     activityLevel?: ActivityLevel
     advisorCharacter?: 'default' | 'kenmochi' | 'gaku' | 'togabito' | 'domoto'
+    /** 記録リマインド通知 */
+    reminders?: ReminderSettings
   }
 }

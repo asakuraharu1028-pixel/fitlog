@@ -4,7 +4,8 @@ import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/
 import { Capacitor } from '@capacitor/core'
 import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed, Search, X, ImagePlus } from 'lucide-react'
 import { useRecipeStore } from '../lib/recipedb'
-import { analyzeRecipeIngredients, getApiKey, stripGroupLabels } from '../lib/gemini'
+import { analyzeRecipeIngredients, stripGroupLabels } from '../lib/gemini'
+import { hasAiKey } from '../lib/ai'
 import { fetchRecipeFromUrl, extractRecipeFromImage } from '../lib/recipefetch'
 import { uploadImageToDrive, loadImageUrlFromDrive, deleteFileFromDrive } from '../lib/google'
 import type { Recipe, RecipeCategory, RecipeIngredient } from '../types'
@@ -125,7 +126,7 @@ function RecipeFormModal({
   const set = (k: keyof FormState, v: string | number) =>
     setF(prev => ({ ...prev, [k]: v }))
 
-  const hasApiKey = !!getApiKey()
+  const hasApiKey = hasAiKey()
   const valid = f.name.trim() !== '' && f.calories >= 0
 
   // 編集時、既存の保存済み画像をDriveから読み込んでプレビュー表示
