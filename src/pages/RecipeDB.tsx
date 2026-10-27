@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { Capacitor } from '@capacitor/core'
-import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed, Search, X, ImagePlus } from 'lucide-react'
+import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed, Search, X, ImagePlus, RefreshCw } from 'lucide-react'
 import { useRecipeStore } from '../lib/recipedb'
 import { analyzeRecipeIngredients, stripGroupLabels } from '../lib/gemini'
 import { hasAiKey } from '../lib/ai'
@@ -534,6 +534,7 @@ function RecipeCard({
   onEdit,
   onDelete,
   onAddMeal,
+  fromNotion,
   selectable,
   selected,
   onToggleSelect,
@@ -542,6 +543,7 @@ function RecipeCard({
   onEdit: () => void
   onDelete: () => void
   onAddMeal: () => void
+  fromNotion?: boolean        // Notion のレシピは閲覧のみ（編集は Notion で行う）
   selectable?: boolean
   selected?: boolean
   onToggleSelect?: () => void
@@ -568,6 +570,9 @@ function RecipeCard({
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${CATEGORY_COLORS[recipe.category]}`}>
               {CATEGORY_LABELS[recipe.category]}
             </span>
+            {fromNotion && (
+              <span className="text-[10px] text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded-full">Notion</span>
+            )}
             {recipe.tags.map(t => (
               <span key={t} className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{t}</span>
             ))}
@@ -637,18 +642,24 @@ function RecipeCard({
             >
               <UtensilsCrossed size={12} /> 食事に追加
             </button>
-            <button
-              onClick={onEdit}
-              className="flex items-center gap-1 text-xs text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition"
-            >
-              <Pencil size={12} /> 編集
-            </button>
-            <button
-              onClick={onDelete}
-              className="flex items-center gap-1 text-xs text-red-400 border border-red-100 rounded-lg px-3 py-1.5 hover:bg-red-50 transition"
-            >
-              <Trash2 size={12} /> 削除
-            </button>
+            {fromNotion ? (
+              <span className="self-center text-[10px] text-gray-400">編集は Notion で</span>
+            ) : (
+              <>
+                <button
+                  onClick={onEdit}
+                  className="flex items-center gap-1 text-xs text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition"
+                >
+                  <Pencil size={12} /> 編集
+                </button>
+                <button
+                  onClick={onDelete}
+                  className="flex items-center gap-1 text-xs text-red-400 border border-red-100 rounded-lg px-3 py-1.5 hover:bg-red-50 transition"
+                >
+                  <Trash2 size={12} /> 削除
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -661,7 +672,7 @@ export default function RecipeDBPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const fromMealType = (location.state as { fromMealType?: string } | null)?.fromMealType
-  const { db, isLoading, isSaving, error, loadDB, addRecipe, updateRecipe, deleteRecipe } = useRecipeStore()
+  const { db, isLoading, isSaving, error, loadDB, addRecipe, updateRecipe, deleteRecipe, isNotionRecipe } = useRecipeStore()
 
   const [filterCat, setFilterCat] = useState<RecipeCategory | 'all'>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -794,6 +805,14 @@ export default function RecipeDBPage() {
         <div className="ml-auto flex items-center gap-2">
           {isSaving && <span className="text-xs text-gray-400">保存中...</span>}
           <span className="text-xs text-gray-400">{db.recipes.length}件</span>
+          <button
+            onClick={() => loadDB({ refresh: true })}
+            disabled={isLoading}
+            className="text-gray-400 hover:text-gray-600 transition disabled:opacity-40"
+            aria-label="Notion から読み直す"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+          </button>
         </div>
       </div>
 
@@ -883,6 +902,7 @@ export default function RecipeDBPage() {
             onEdit={() => handleEdit(r)}
             onDelete={() => handleDelete(r.id)}
             onAddMeal={() => navigate('/meal', { state: { pendingEntries: [recipeToEntry(r)], mealType: fromMealType } })}
+            fromNotion={isNotionRecipe(r.id)}
             selectable={!!fromMealType}
             selected={selectedIds.has(r.id)}
             onToggleSelect={() => toggleSelect(r.id)}
