@@ -46,6 +46,41 @@ const CATEGORY_RULES = [
 ]
 const DEFAULT_CATEGORY = 'side'
 
+// 「使う材料」でつなぐ DB_材料リスト。スクリプトプロパティ INGREDIENT_DB_ID があればそちらを使う
+const INGREDIENT_DB_ID = '27cbbbea3936823fb81281a0c8f3d980'
+const INGREDIENT_RELATION = '使う材料'
+// 材料としてつながない分量の行
+const INGREDIENT_SKIP = ['水', '湯', 'お湯', '氷', '付属のタレ', 'トッピング', 'ブロッコリー・トマトなど', '無塩スパイスミックス又はハーブミックス']
+// 分量の書き方 → DB_材料リスト の材料名（複数につなぐときは配列）。かっこ書き・かぎかっこと「A」「B」の印は先に外す
+const INGREDIENT_ALIASES = {
+  'ニンニク': 'にんにく', '料理酒': '酒', 'うす口しょうゆ': 'しょうゆ', 'ゴマ油': 'ごま油', '炒りごま': 'いりごま',
+  '麺つゆ': 'めんつゆ', '濃縮めんつゆ': 'めんつゆ', '粗挽き黒こしょう': '黒こしょう', '塩胡椒': ['塩', 'こしょう'],
+  '瀬戸のほんじお': '塩', '天然塩': '塩', 'ほんだし': '和風だし', '洋風スープの素': 'コンソメ', '鶏だし': '鶏がらスープの素',
+  '一味とうがらし': '唐辛子', '七味とうがらし': '唐辛子', 'トマト水煮缶': 'トマト缶', '海苔': '焼きのり',
+  '青ねぎ': '小ねぎ', '刻み青ネギ': '小ねぎ', '大根おろし': '大根', '冷凍枝豆': 'ゆで枝豆', '温かいご飯': 'ごはん', '米': 'ごはん',
+  '鶏胸肉': '鶏むね', 'ショルダーベーコン': 'ベーコン', 'むきえび': 'えび',
+  '大葉': '青じそ', '青しそ葉': '青じそ', 'ドライパセリ': 'パセリ', '乾燥パセリ': 'パセリ', 'イタリアンパセリ': 'パセリ',
+  '舞茸': 'まいたけ', '長芋': '長いも', '胡瓜': 'きゅうり', '茄子': 'なす', 'マグロ': 'まぐろ',
+  '豚赤身ひき肉': '豚ひき肉', '豚もも挽肉': '豚ひき肉', '牛赤身ひき肉': '牛ひき肉',
+  '豚もも薄切り肉': '豚もも', '牛もも薄切り肉': '牛もも', '豚バラ薄切り肉': '豚バラ', '豚ばら薄切り肉': '豚バラ',
+  'ウインナーソーセージ': 'ウインナー', 'ひきわり納豆': '納豆', '絹豆腐': '絹ごし豆腐', 'カットわかめ': 'わかめ', '乾燥わかめ': 'わかめ',
+  'さば水煮缶': 'さば缶', 'さばみそ煮缶': 'さば缶', '白滝': '糸こんにゃく', '焼き肉のたれ': '焼肉のたれ', 'ハーブ入りソルト': 'ハーブソルト',
+  '醤油': 'しょうゆ', '薄口しょうゆ': 'しょうゆ', '味噌': 'みそ', '人参': 'にんじん', '生姜': 'しょうが',
+  'おろし生姜': 'しょうが', 'おろしにんにく': 'にんにく', 'すりおろしにんにく': 'にんにく',
+  'オリーブオイル': 'オリーブ油', 'ケチャップ': 'トマトケチャップ', 'ぽん酢しょうゆ': 'ポン酢', 'ポン酢しょうゆ': 'ポン酢',
+  '粗びき黒こしょう': '黒こしょう', 'お酢': '酢', 'すし酢': '酢', '米油': 'サラダ油', '小麦粉': '薄力粉', '乾燥パン粉': 'パン粉',
+  'ご飯': 'ごはん', 'もち麦ご飯': 'ごはん', 'もち麦ごはん': 'ごはん', '麦ご飯': 'ごはん',
+  '白ごま': 'いりごま', '白いりごま': 'いりごま', '白すりごま': 'すりごま', 'かつお節': '削り節',
+  '長葱': '長ねぎ', '小口ねぎ': '小ねぎ', '細ねぎ': '小ねぎ', 'カットしめじ': 'しめじ', '冷凍ブロッコリー': 'ブロッコリー',
+  'パプリカ': 'パプリカ赤・黄', 'アボカド': '冷凍アボカド', '赤とうがらし': '唐辛子',
+  'ツナ水煮': 'ツナ缶', 'トマト水煮': 'トマト缶', 'ホールコーン': 'コーン缶',
+  '顆粒コンソメ': 'コンソメ', '和風だしの素': '和風だし', '鰹だしの素': '和風だし', '鶏がらスープ': '鶏がらスープの素',
+  '鶏ささ身': '鶏ささみ', '牛こま切れ肉': '牛こま', '牛こま肉': '牛こま', '豚ロース肉': '豚ロース', '豚ロース薄切り肉': '豚ロース',
+  'ロースハム': 'ハム', 'ボンレスハム': 'ハム', '鮭': '生鮭', 'たこ': '蒸したこ', 'かにかま': 'かに風味かまぼこ',
+  '溶き卵': '卵', '卵黄': '卵', '卵白': '卵', '温泉卵': '卵', 'ゆで卵': '卵',
+  'プレーンヨーグルト': 'ヨーグルト', 'ギリシャヨーグルト': 'ヨーグルト', '水溶き片栗粉': '片栗粉',
+}
+
 function doGet() {
   return json_({ ok: true, service: 'fitlog-recipe-proxy' })
 }
@@ -229,6 +264,7 @@ function number_(prop) {
 function importRecipes_(recipes) {
   if (!Array.isArray(recipes)) throw new Error('recipes must be an array')
   const databaseId = prop_('RECIPE_DB_ID')
+  const index = tryIngredientIndex_()
   const byName = {}
   queryDatabase_(databaseId).forEach(page => {
     if (page.archived || page.in_trash) return
@@ -239,6 +275,7 @@ function importRecipes_(recipes) {
   const results = recipes.map(recipe => {
     try {
       const props = fromRecipe_(recipe)
+      setIngredientRelation_(props, recipe.ingredients, index)
       const key = normalizeName_(recipe.name)
       const page = byName[key]
       if (!page) {
@@ -267,17 +304,20 @@ function importRecipes_(recipes) {
 // ---- 追加・編集・削除 ----
 
 function createRecipe_(recipe) {
-  const created = notion_('post', '/pages', { parent: { database_id: prop_('RECIPE_DB_ID') }, properties: fromRecipe_(recipe) })
+  const props = fromRecipe_(recipe)
+  setIngredientRelation_(props, recipe.ingredients, tryIngredientIndex_())
+  const created = notion_('post', '/pages', { parent: { database_id: prop_('RECIPE_DB_ID') }, properties: props })
   clearRecipesCache_()
   return toRecipe_(created)
 }
 
 // アプリのフォームの内容で上書きする。空にした項目は Notion でも空にする。
 // カテゴリーは fitlog の分類が変わったときだけ書き換え（「主菜・副菜」のような複数指定を残す）、
-// 下味冷凍の「不可」と、アプリにない列（曜日・使う材料など）は触らない
+// 下味冷凍の「不可」と、アプリにない列（曜日など）は触らない。使う材料は分量からつなぎ直す
 function updateRecipe_(id, recipe) {
   const page = getRecipePage_(id)
   const props = fromRecipe_(recipe, true)
+  setIngredientRelation_(props, recipe.ingredients, tryIngredientIndex_(), true)
   if (toCategory_(multiSelect_(page.properties['カテゴリー'])) === recipe.category) delete props['カテゴリー']
   if (!props['下味冷凍'] && select_(page.properties['下味冷凍']) === '可') props['下味冷凍'] = { select: null }
   const updated = notion_('patch', '/pages/' + page.id, { properties: props })
@@ -307,6 +347,92 @@ function getRecipePage_(id) {
 
 function clearRecipesCache_() {
   CacheService.getScriptCache().remove(RECIPES_CACHE_KEY + ':n')
+}
+
+// ---- 使う材料（DB_材料リストとのリレーション） ----
+
+// 材料名 → DB_材料リストのページID
+function ingredientIndex_() {
+  const dbId = PropertiesService.getScriptProperties().getProperty('INGREDIENT_DB_ID') || INGREDIENT_DB_ID
+  const index = {}
+  queryDatabase_(dbId).forEach(page => {
+    if (page.archived || page.in_trash) return
+    const name = plainText_((page.properties || {})['材料']).normalize('NFKC').trim()
+    if (name && !index[name]) index[name] = page.id
+  })
+  return index
+}
+
+// アプリからの書き込み用。DB_材料リストが読めなくてもレシピの保存は止めない（使う材料は触らない）
+function tryIngredientIndex_() {
+  try {
+    return ingredientIndex_()
+  } catch (err) {
+    Logger.log('DB_材料リストを読めない: %s', (err && err.message) || err)
+    return null
+  }
+}
+
+// 分量の材料名を DB_材料リストの名前にそろえる（「塩胡椒」のように複数なら配列）。水など、つながない行は null
+function ingredientKey_(raw) {
+  let s = String(raw || '').normalize('NFKC').trim()
+  s = s.replace(/^[A-Z](?=[^\sA-Za-z])/, '')          // 「Aしょうゆ」の A
+  s = s.replace(/\([^)]*\)/g, '').trim()              // 「鶏むね肉（皮なし）」のかっこ書き
+  s = s.replace(/[「」『』]/g, '')                     // 「ほんだし」のかぎかっこ
+  s = s.split(/\s+/)[0] || ''                         // 「まぐろ ６切れ」の後ろ
+  if (!s || /^-+$/.test(s) || INGREDIENT_SKIP.indexOf(s) >= 0) return null
+  return INGREDIENT_ALIASES[s] || s
+}
+
+// 材料の配列 → { ids: つながるページID, unmatched: DB_材料リストにない名前 }
+function matchIngredients_(ingredients, index) {
+  const ids = []
+  const unmatched = []
+  ;(Array.isArray(ingredients) ? ingredients : []).forEach(i => {
+    const keys = ingredientKey_(i && i.name)
+    if (!keys) return
+    ;[].concat(keys).forEach(key => {
+      // 「鶏むね肉」→「鶏むね」のように、末尾の「肉」を外して当たるものも拾う
+      const id = index[key] || (/.肉$/.test(key) ? index[key.slice(0, -1)] : undefined)
+      if (id) {
+        if (ids.indexOf(id) < 0) ids.push(id)
+      } else if (unmatched.indexOf(key) < 0) {
+        unmatched.push(key)
+      }
+    })
+  })
+  return { ids: ids, unmatched: unmatched }
+}
+
+// props に使う材料を入れる。clear なら、つながる材料がなくても空で上書きする。index がなければ何もしない
+function setIngredientRelation_(props, ingredients, index, clear) {
+  if (!index) return
+  const ids = matchIngredients_(ingredients, index).ids
+  if (ids.length || clear) props[INGREDIENT_RELATION] = { relation: ids.map(id => ({ id: id })) }
+}
+
+// 使う材料が空のレシピに、分量からリレーションを入れる。dryRun なら書き込まずに結果だけ返す
+function linkIngredients_(dryRun) {
+  const index = ingredientIndex_()
+  const result = { checked: 0, linked: 0, noMatch: [], unmatched: {} }
+  queryDatabase_(prop_('RECIPE_DB_ID')).forEach(page => {
+    if (page.archived || page.in_trash) return
+    const p = page.properties || {}
+    if (!isEmptyProp_(p[INGREDIENT_RELATION])) return
+    result.checked++
+    const m = matchIngredients_(parseIngredients_(plainText_(p['分量'])), index)
+    m.unmatched.forEach(name => { result.unmatched[name] = (result.unmatched[name] || 0) + 1 })
+    if (!m.ids.length) {
+      result.noMatch.push(plainText_(p['料理名']))
+      return
+    }
+    if (!dryRun) {
+      notion_('patch', '/pages/' + page.id, { properties: { [INGREDIENT_RELATION]: { relation: m.ids.map(id => ({ id: id })) } } })
+    }
+    result.linked++
+  })
+  if (!dryRun) clearRecipesCache_()
+  return result
 }
 
 // Recipe → Notion のプロパティ。値のないものは含めない（clear なら空の値で上書きする）
@@ -378,6 +504,7 @@ function isEmptyProp_(prop) {
     case 'url': return !prop.url
     case 'multi_select': return !prop.multi_select.length
     case 'select': return !prop.select
+    case 'relation': return !prop.relation.length
     default: return false
   }
 }
@@ -424,6 +551,23 @@ function putCachedJson_(key, value, seconds) {
   }
   entries[key + ':n'] = String(n)
   CacheService.getScriptCache().putAll(entries, seconds)
+}
+
+// エディタから実行する：使う材料が空のレシピについて、つながる件数とDB_材料リストにない材料を表示（書き込まない）
+function debugLinkIngredientsDryRun() {
+  logLinkResult_(linkIngredients_(true))
+}
+
+// エディタから実行する：使う材料が空のレシピに、分量からリレーションを入れる
+function runLinkIngredients() {
+  logLinkResult_(linkIngredients_(false))
+}
+
+function logLinkResult_(r) {
+  Logger.log('対象 %s 件 / つないだ %s 件 / 1つもつながらない %s 件', r.checked, r.linked, r.noMatch.length)
+  const names = Object.keys(r.unmatched).sort((a, b) => r.unmatched[b] - r.unmatched[a])
+  Logger.log('DB_材料リストにない材料 %s 種類: %s', names.length, names.map(n => n + '(' + r.unmatched[n] + ')').join('、'))
+  if (r.noMatch.length) Logger.log('1つもつながらないレシピ: %s', r.noMatch.join('、'))
 }
 
 // エディタから実行して設定と変換を確かめる用（認証は通さない）
