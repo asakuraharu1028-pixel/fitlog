@@ -14,15 +14,22 @@ type ProxyRecipe = Omit<Recipe, 'servings' | 'calories' | 'protein' | 'fat' | 'c
   carbs: number | null
 }
 
-type ProxyResponse =
-  | { ok: true; data: { version: 1; recipes: ProxyRecipe[]; fetchedAt: string } }
+type ProxyResponse<T> =
+  | { ok: true; data: T }
   | { ok: false; error: string }
+
+export interface ImportResult {
+  id: string                  // 送った Recipe の id
+  status: 'created' | 'updated' | 'skipped' | 'failed'
+  notionId?: string
+  error?: string
+}
 
 export function isRecipeProxyConfigured(): boolean {
   return !!PROXY_URL
 }
 
-async function callProxy(body: Record<string, unknown>, retry = true): Promise<ProxyResponse> {
+async function callProxy<T>(body: Record<string, unknown>, retry = true): Promise<ProxyResponse<T>> {
   if (!PROXY_URL) throw new Error('VITE_RECIPE_PROXY_URL is not set')
   const token = getAccessToken()
   if (!token) throw new Error('Not authenticated')
@@ -33,11 +40,11 @@ async function callProxy(body: Record<string, unknown>, retry = true): Promise<P
     body: JSON.stringify({ ...body, token }),
   })
   if (!res.ok) throw new Error(`Recipe proxy error: ${res.status}`)
-  const json = (await res.json()) as ProxyResponse
+  const json = (await res.json()) as ProxyResponse<T>
   if (!json.ok && json.error === 'unauthorized' && retry && !Capacitor.isNativePlatform()) {
     // トークン期限切れ → 再取得してリトライ
     await requestAccessToken()
-    return callProxy(body, false)
+    return callProxy<T>(body, false)
   }
   return json
 }
@@ -55,7 +62,14 @@ function toRecipe(r: ProxyRecipe): Recipe {
 }
 
 export async function fetchNotionRecipes(refresh = false): Promise<Recipe[]> {
-  const res = await callProxy({ action: 'listRecipes', refresh })
+  const res = await callProxy<{ recipes: ProxyRecipe[] }>({ action: 'listRecipes', refresh })
   if (!res.ok) throw new Error(`Recipe proxy error: ${res.error}`)
   return res.data.recipes.map(toRecipe)
+}
+
+// Notion に入れる。同じ料理名があれば空の項目だけ埋める（中継側で判定）
+export async function importNotionRecipes(recipes: Recipe[]): Promise<ImportResult[]> {
+  const res = await callProxy<{ results: ImportResult[] }>({ action: 'importRecipes', recipes })
+  if (!res.ok) throw new Error(`Recipe proxy error: ${res.error}`)
+  return res.data.results
 }

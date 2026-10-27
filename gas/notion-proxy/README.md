@@ -1,7 +1,7 @@
 # fitlog レシピ中継（GAS）
 
 Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`src/types/index.ts`）で返す Web アプリです。
-いまは読み取り専用で、`listRecipes` だけに対応しています。
+`listRecipes`（読み取り）と、recipe-db.json から移すための `importRecipes`（書き込み）に対応しています。
 
 - Notion のトークンは GAS のスクリプトプロパティに置き、アプリには持たせません。
 - アプリから届いた Google アクセストークンで Drive の `about` を呼び、`ALLOWED_EMAIL` のアカウントか確かめます（アプリの `drive.appdata` スコープのままで呼べます）。
@@ -21,6 +21,15 @@ Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`s
 { "ok": true, "data": { "version": 1, "recipes": [ ... ], "fetchedAt": "2026-10-27T00:00:00.000Z" } }
 { "ok": false, "error": "unauthorized" }
 ```
+
+`importRecipes` は fitlog の `Recipe` の配列を受け取り、同じ料理名（空白・全角半角を無視）のページがあれば空の項目だけ埋め、なければ作ります。何度送っても重複しません。
+
+```json
+{ "action": "importRecipes", "token": "...", "recipes": [ { "id": "...", "name": "豚丼", ... } ] }
+{ "ok": true, "data": { "results": [ { "id": "...", "status": "created", "notionId": "..." } ] } }
+```
+
+`status` は `created`・`updated`・`skipped`（埋める項目なし）・`failed`（`error` 付き）。Notion が 401/403 を返したときは全体を `ok: false` で止めます。主食（staple）は料理名から 丼・麺類・サンドイッチ・パン・ごはん に振り分け、冷凍可・下味冷凍可 以外のタグはメモに「タグ: …」で残します。
 
 `error` は `unauthorized`（トークンなし・期限切れ）、`forbidden`（別アカウント）、`unknown action`、`notion 4xx: ...`、`script property ... is not set` のいずれかです。
 
@@ -46,7 +55,7 @@ Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`s
 ## セットアップ
 
 1. **Notion のインテグレーションを作る**
-   - https://www.notion.so/profile/integrations で「新しいインテグレーション」を作ります（種類：内部、機能：コンテンツを読み取る だけ）。
+   - https://www.notion.so/profile/integrations で「新しいインテグレーション」を作ります（種類：内部、機能：コンテンツを読み取る・更新する・挿入する）。
    - 表示されたシークレットを控えます。
    - Notion の「献立・レシピ管理」ページ右上の「…」→「接続」から、このインテグレーションを追加します。
 2. **GAS プロジェクトを作る**

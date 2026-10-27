@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera'
 import { Capacitor } from '@capacitor/core'
 import { ArrowLeft, Plus, Pencil, Trash2, ChevronDown, ChevronUp, ExternalLink, BookOpen, Sparkles, ChefHat, Link, UtensilsCrossed, Search, X, ImagePlus, RefreshCw } from 'lucide-react'
-import { useRecipeStore } from '../lib/recipedb'
+import { useRecipeStore, type MigrationProgress } from '../lib/recipedb'
+import { isRecipeProxyConfigured } from '../lib/recipeproxy'
 import { analyzeRecipeIngredients, stripGroupLabels } from '../lib/gemini'
 import { hasAiKey } from '../lib/ai'
 import { fetchRecipeFromUrl, extractRecipeFromImage } from '../lib/recipefetch'
@@ -672,7 +673,10 @@ export default function RecipeDBPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const fromMealType = (location.state as { fromMealType?: string } | null)?.fromMealType
-  const { db, isLoading, isSaving, error, loadDB, addRecipe, updateRecipe, deleteRecipe, isNotionRecipe } = useRecipeStore()
+  const { db, localDB, isLoading, isSaving, error, loadDB, addRecipe, updateRecipe, deleteRecipe, isNotionRecipe, migrateToNotion } = useRecipeStore()
+  const [migration, setMigration] = useState<MigrationProgress | null>(null)
+  const [migrating, setMigrating] = useState(false)
+  const [migrationError, setMigrationError] = useState<string | null>(null)
 
   const [filterCat, setFilterCat] = useState<RecipeCategory | 'all'>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -776,6 +780,19 @@ export default function RecipeDBPage() {
     setEditTarget(null)
   }
 
+  const handleMigrate = async () => {
+    if (!window.confirm(`アプリだけにあるレシピ ${localDB.recipes.length}件を Notion に移します。同じ料理名が Notion にあれば、空の項目だけ埋めます。元のデータは recipe-db.backup.json に残します。`)) return
+    setMigrating(true)
+    setMigrationError(null)
+    try {
+      await migrateToNotion(setMigration)
+    } catch (e) {
+      setMigrationError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setMigrating(false)
+    }
+  }
+
   const handleEdit = (r: Recipe) => {
     setEditTarget(r)
     setShowForm(true)
@@ -819,6 +836,31 @@ export default function RecipeDBPage() {
       {/* エラー */}
       {error && (
         <div className="bg-red-50 text-red-500 text-xs rounded-xl px-4 py-3">{error}</div>
+      )}
+
+      {/* recipe-db.json → Notion 移行 */}
+      {isRecipeProxyConfigured() && (localDB.recipes.length > 0 || migration) && (
+        <div className="bg-amber-50 text-amber-700 text-xs rounded-xl px-4 py-3 space-y-2">
+          {localDB.recipes.length > 0 && (
+            <div className="flex items-center gap-2">
+              <p className="flex-1">アプリだけにあるレシピが {localDB.recipes.length}件あります（Notion にはありません）</p>
+              <button
+                onClick={handleMigrate}
+                disabled={migrating || isLoading}
+                className="shrink-0 bg-amber-500 text-white rounded-lg px-3 py-1.5 font-bold disabled:opacity-50"
+              >
+                {migrating ? '移行中...' : 'Notionへ移行'}
+              </button>
+            </div>
+          )}
+          {migration && (
+            <p>{migration.done} / {migration.total}件 処理{migration.failed.length > 0 && `（失敗 ${migration.failed.length}件）`}</p>
+          )}
+          {migration?.failed.map(f => (
+            <p key={f.name} className="text-red-500">{f.name}: {f.error}</p>
+          ))}
+          {migrationError && <p className="text-red-500">{migrationError}</p>}
+        </div>
       )}
 
       {/* 検索バー */}

@@ -1,9 +1,11 @@
 import { create } from 'zustand'
 import { loadFileFromDrive, saveFileToDrive } from './google'
-import { fetchNotionRecipes, isRecipeProxyConfigured } from './recipeproxy'
-import type { Recipe, RecipeDB, RecipeCategory } from '../types'
+import { fetchNotionRecipes, importNotionRecipes, isRecipeProxyConfigured } from './recipeproxy'
+import type { Recipe, RecipeDB, RecipeCategory, RecipeIngredient } from '../types'
 
 const FILE_NAME = 'recipe-db.json'
+const BACKUP_FILE_NAME = 'recipe-db.backup.json'
+const IMPORT_CHUNK_SIZE = 20  // GAS の実行時間（6分）に余裕を持たせる
 const EMPTY_DB: RecipeDB = { version: 1, recipes: [] }
 
 function isRecipeDB(d: unknown): d is RecipeDB {
@@ -24,6 +26,42 @@ function mergeRecipes(notion: Recipe[], local: Recipe[]): RecipeDB {
   }
 }
 
+// 以前の登録画面は「豚ロース: 50 g」を name「豚ロース: 50」amount「g」のように切っていたので、
+// コロンで分け直す
+function fixIngredient(i: RecipeIngredient): RecipeIngredient {
+  const m = i.name.match(/^(.+?)\s*[:：]\s*(.*)$/)
+  if (!m) return i
+  return { name: m[1].trim(), amount: (m[2] + i.amount).trim() }
+}
+
+// 同じ料理名が複数あれば1件にまとめる（先のものを優先し、空の項目だけ後のもので埋める）
+function groupForImport(recipes: Recipe[]): { recipe: Recipe; ids: string[] }[] {
+  const groups = new Map<string, { recipe: Recipe; ids: string[] }>()
+  for (const r of recipes) {
+    const fixed: Recipe = { ...r, ingredients: r.ingredients?.map(fixIngredient) }
+    const key = normalizeName(r.name)
+    const g = groups.get(key)
+    if (!g) {
+      groups.set(key, { recipe: fixed, ids: [r.id] })
+      continue
+    }
+    g.ids.push(r.id)
+    const merged = { ...g.recipe } as Record<string, unknown>
+    for (const [k, v] of Object.entries(fixed)) {
+      const cur = merged[k]
+      if (cur === undefined || cur === '' || (Array.isArray(cur) && cur.length === 0)) merged[k] = v
+    }
+    g.recipe = merged as unknown as Recipe
+  }
+  return [...groups.values()]
+}
+
+export interface MigrationProgress {
+  done: number
+  total: number
+  failed: { name: string; error: string }[]
+}
+
 interface RecipeStore {
   db: RecipeDB                // 画面や献立生成が使う、Notion と recipe-db.json を合わせたもの
   localDB: RecipeDB           // recipe-db.json の中身
@@ -35,6 +73,7 @@ interface RecipeStore {
   addRecipe: (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
   updateRecipe: (id: string, patch: Partial<Omit<Recipe, 'id' | 'createdAt'>>) => Promise<void>
   deleteRecipe: (id: string) => Promise<void>
+  migrateToNotion: (onProgress: (p: MigrationProgress) => void) => Promise<MigrationProgress>
   isNotionRecipe: (id: string) => boolean
   getByCategory: (category: RecipeCategory) => Recipe[]
 }
@@ -123,6 +162,41 @@ export const useRecipeStore = create<RecipeStore>((set, get) => {
       if (rejectNotionEdit(id)) return
       const { localDB } = get()
       await saveLocal({ ...localDB, recipes: localDB.recipes.filter(r => r.id !== id) })
+    },
+
+    // recipe-db.json のレシピを Notion に移し、移せたものを recipe-db.json から外す。
+    // 最初の1回だけ元の内容を recipe-db.backup.json に残す
+    migrateToNotion: async (onProgress) => {
+      const { localDB } = get()
+      if (!(await loadFileFromDrive<RecipeDB>(BACKUP_FILE_NAME))) {
+        await saveFileToDrive(BACKUP_FILE_NAME, localDB)
+      }
+
+      const groups = groupForImport(localDB.recipes)
+      const progress: MigrationProgress = { done: 0, total: groups.length, failed: [] }
+      const migratedIds = new Set<string>()
+      onProgress({ ...progress })
+      try {
+        for (let i = 0; i < groups.length; i += IMPORT_CHUNK_SIZE) {
+          const chunk = groups.slice(i, i + IMPORT_CHUNK_SIZE)
+          const results = await importNotionRecipes(chunk.map(g => g.recipe))
+          const byId = new Map(results.map(r => [r.id, r]))
+          for (const g of chunk) {
+            const r = byId.get(g.recipe.id)
+            if (r && r.status !== 'failed') g.ids.forEach(id => migratedIds.add(id))
+            else progress.failed.push({ name: g.recipe.name, error: r?.error ?? 'no result' })
+          }
+          progress.done += chunk.length
+          onProgress({ ...progress, failed: [...progress.failed] })
+        }
+      } finally {
+        // 途中で止まっても、移せた分は recipe-db.json から外す（再実行しても重複はしない）
+        if (migratedIds.size > 0) {
+          await saveLocal({ ...localDB, recipes: localDB.recipes.filter(r => !migratedIds.has(r.id)) })
+        }
+        await get().loadDB({ refresh: true })
+      }
+      return progress
     },
 
     isNotionRecipe: (id) => get().notionRecipes.some(r => r.id === id),

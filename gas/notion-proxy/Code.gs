@@ -1,7 +1,8 @@
 /**
- * fitlog レシピ中継（読み取り専用）
+ * fitlog レシピ中継
  *
  * Notion の「DB_レシピリスト」を読み、fitlog の Recipe 形式に変換して返す。
+ * importRecipes で fitlog の Recipe を Notion に入れる（recipe-db.json からの移行用）。
  * Notion のトークンはスクリプトプロパティに置き、アプリには渡さない。
  *
  * スクリプトプロパティ:
@@ -11,6 +12,7 @@
  *
  * 呼び出し（POST, Content-Type: text/plain でプリフライトを避ける）:
  *   { "action": "listRecipes", "token": "<Google アクセストークン>", "refresh": false }
+ *   { "action": "importRecipes", "token": "...", "recipes": [<Recipe>...] }
  * 応答:
  *   { "ok": true, "data": { "version": 1, "recipes": [...], "fetchedAt": "..." } }
  *   { "ok": false, "error": "unauthorized" }
@@ -51,6 +53,8 @@ function doPost(e) {
     switch (req.action) {
       case 'listRecipes':
         return json_({ ok: true, data: listRecipes_(req.refresh === true) })
+      case 'importRecipes':
+        return json_({ ok: true, data: importRecipes_(req.recipes) })
       default:
         return json_({ ok: false, error: 'unknown action' })
     }
@@ -198,6 +202,120 @@ function select_(prop) {
 
 function number_(prop) {
   return prop && typeof prop.number === 'number' ? prop.number : null
+}
+
+// ---- 移行（recipe-db.json → Notion） ----
+
+// fitlog の Recipe を Notion に入れる。同じ料理名のページがあれば空の項目だけ埋め、なければ作る。
+// 何度実行しても重複しない。結果は1件ずつ { id, status, notionId?, error? } で返す
+function importRecipes_(recipes) {
+  if (!Array.isArray(recipes)) throw new Error('recipes must be an array')
+  const databaseId = prop_('RECIPE_DB_ID')
+  const byName = {}
+  queryDatabase_(databaseId).forEach(page => {
+    if (page.archived || page.in_trash) return
+    const key = normalizeName_(plainText_((page.properties || {})['料理名']))
+    if (key && !byName[key]) byName[key] = page
+  })
+
+  const results = recipes.map(recipe => {
+    try {
+      const props = fromRecipe_(recipe)
+      const key = normalizeName_(recipe.name)
+      const page = byName[key]
+      if (!page) {
+        const created = notion_('post', '/pages', { parent: { database_id: databaseId }, properties: props })
+        byName[key] = created
+        return { id: recipe.id, status: 'created', notionId: created.id }
+      }
+      const patch = {}
+      Object.keys(props).forEach(name => {
+        if (isEmptyProp_(page.properties[name])) patch[name] = props[name]
+      })
+      if (Object.keys(patch).length === 0) return { id: recipe.id, status: 'skipped', notionId: page.id }
+      notion_('patch', '/pages/' + page.id, { properties: patch })
+      return { id: recipe.id, status: 'updated', notionId: page.id }
+    } catch (err) {
+      const message = String((err && err.message) || err)
+      // 権限不足やトークン不正は全件同じ結果になるので止める
+      if (/^notion 40[13]/.test(message)) throw err
+      return { id: recipe.id, status: 'failed', error: message }
+    }
+  })
+  CacheService.getScriptCache().remove(RECIPES_CACHE_KEY + ':n')
+  return { results: results }
+}
+
+// Recipe → Notion のプロパティ。値のないものは含めない
+function fromRecipe_(r) {
+  if (!r || typeof r.name !== 'string' || !r.name.trim()) throw new Error('name is required')
+  const props = { '料理名': { title: richText_(r.name.trim()) } }
+  props['カテゴリー'] = { multi_select: [{ name: toNotionCategory_(r.category, r.name) }] }
+
+  const tags = Array.isArray(r.tags) ? r.tags : []
+  if (tags.indexOf('冷凍可') >= 0) props['冷凍可'] = { multi_select: [{ name: '冷凍可' }] }
+  if (tags.indexOf('下味冷凍可') >= 0) props['下味冷凍'] = { select: { name: '可' } }
+
+  const numbers = { '人数': r.servings, 'kcal': r.calories, 'たんぱく質': r.protein, '脂質': r.fat, '炭水化物': r.carbs, '食塩相当量': r.sodium }
+  Object.keys(numbers).forEach(name => {
+    if (typeof numbers[name] === 'number' && isFinite(numbers[name])) props[name] = { number: numbers[name] }
+  })
+
+  const ingredients = (Array.isArray(r.ingredients) ? r.ingredients : [])
+    .filter(i => i && i.name)
+    .map(i => i.amount ? i.name + '｜' + i.amount : i.name)
+  if (ingredients.length) props['分量'] = { rich_text: richText_(ingredients.join('\n')) }
+
+  // Notion に列のないタグはメモに残す
+  const otherTags = tags.filter(t => t !== '冷凍可' && t !== '下味冷凍可')
+  const note = [r.note || '', otherTags.length ? 'タグ: ' + otherTags.join('、') : ''].filter(Boolean).join('\n')
+  if (note) props['メモ'] = { rich_text: richText_(note) }
+  if (r.sourceUrl) props['URL'] = { url: r.sourceUrl }
+  if (r.imageFileId) props['fitlog画像ID'] = { rich_text: richText_(r.imageFileId) }
+  return props
+}
+
+// CATEGORY_RULES の逆。主食は料理名から 丼・麺類・ごはん に分ける
+function toNotionCategory_(category, name) {
+  switch (category) {
+    case 'main': return '主菜'
+    case 'side': return '副菜'
+    case 'soup': return '汁もの'
+    case 'breakfast': return '朝食'
+    case 'snack': return 'おやつ'
+    case 'bento': return '弁当'
+    case 'staple':
+      if (/丼/.test(name)) return '丼'
+      if (/麺|うどん|そば|蕎麦|パスタ|スパゲッティ|ラーメン|ナポリタン/.test(name)) return '麺類'
+      if (/サンド/.test(name)) return 'サンドイッチ'
+      if (/パン|トースト/.test(name)) return 'パン'
+      return 'ごはん'
+    default: return 'その他'
+  }
+}
+
+// Notion の rich_text は1要素2000文字まで
+function richText_(text) {
+  const parts = []
+  for (let i = 0; i < text.length; i += 2000) parts.push({ type: 'text', text: { content: text.slice(i, i + 2000) } })
+  return parts
+}
+
+function isEmptyProp_(prop) {
+  if (!prop) return true
+  switch (prop.type) {
+    case 'title': return !prop.title.length
+    case 'rich_text': return !prop.rich_text.length
+    case 'number': return prop.number === null
+    case 'url': return !prop.url
+    case 'multi_select': return !prop.multi_select.length
+    case 'select': return !prop.select
+    default: return false
+  }
+}
+
+function normalizeName_(name) {
+  return String(name || '').normalize('NFKC').replace(/\s+/g, '')
 }
 
 // ---- 共通 ----
