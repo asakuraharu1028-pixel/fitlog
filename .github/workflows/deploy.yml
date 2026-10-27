@@ -27,6 +27,7 @@ jobs:
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
           VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.VITE_GOOGLE_CLIENT_SECRET }}
+          VITE_RECIPE_PROXY_URL: ${{ vars.VITE_RECIPE_PROXY_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
