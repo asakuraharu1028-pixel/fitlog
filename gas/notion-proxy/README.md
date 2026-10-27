@@ -1,7 +1,7 @@
 # fitlog レシピ中継（GAS）
 
 Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`src/types/index.ts`）で返す Web アプリです。
-`listRecipes`（読み取り）と、recipe-db.json から移すための `importRecipes`（書き込み）に対応しています。
+`listRecipes`（読み取り）、アプリからの `createRecipe`・`updateRecipe`・`deleteRecipe`（追加・編集・削除）、recipe-db.json から移すための `importRecipes` に対応しています。
 
 - Notion のトークンは GAS のスクリプトプロパティに置き、アプリには持たせません。
 - アプリから届いた Google アクセストークンで Drive の `about` を呼び、`ALLOWED_EMAIL` のアカウントか確かめます（アプリの `drive.appdata` スコープのままで呼べます）。
@@ -21,6 +21,19 @@ Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`s
 { "ok": true, "data": { "version": 1, "recipes": [ ... ], "fetchedAt": "2026-10-27T00:00:00.000Z" } }
 { "ok": false, "error": "unauthorized" }
 ```
+
+`createRecipe`・`updateRecipe` は変換後の `Recipe` を、`deleteRecipe` は `{ id }` を返します。
+
+```json
+{ "action": "createRecipe", "token": "...", "recipe": { "name": "豚丼", "category": "staple", ... } }
+{ "action": "updateRecipe", "token": "...", "id": "<ページID>", "recipe": { ... } }
+{ "action": "deleteRecipe", "token": "...", "id": "<ページID>" }
+```
+
+- 編集はフォームの内容で上書きし、アプリで空にした項目は Notion でも空にします。カテゴリーは fitlog の分類が変わったときだけ書き換えるので、「主菜・副菜」のような複数指定は残ります。下味冷凍の「不可」と、アプリにない列（曜日・使う材料など）は変えません。
+- 削除はページを Notion のゴミ箱に移すだけです（Notion から戻せます）。
+- 編集・削除できるのは DB_レシピリスト のページだけです。ほかのページの ID には `recipe not found` を返します。
+- Notion に列のないタグはメモの末尾に「タグ: …」で書き、読み込むときにタグへ戻します。
 
 `importRecipes` は fitlog の `Recipe` の配列を受け取り、同じ料理名（空白・全角半角を無視）のページがあれば空の項目だけ埋め、なければ作ります。何度送っても重複しません。
 

@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import { loadFileFromDrive, saveFileToDrive } from './google'
-import { fetchNotionRecipes, importNotionRecipes, isRecipeProxyConfigured } from './recipeproxy'
+import {
+  fetchNotionRecipes, importNotionRecipes, isRecipeProxyConfigured,
+  createNotionRecipe, updateNotionRecipe, deleteNotionRecipe,
+} from './recipeproxy'
 import type { Recipe, RecipeDB, RecipeCategory, RecipeIngredient } from '../types'
 
 const FILE_NAME = 'recipe-db.json'
@@ -79,7 +82,7 @@ interface RecipeStore {
 }
 
 export const useRecipeStore = create<RecipeStore>((set, get) => {
-  // recipe-db.json を書き換えて保存する。Notion のレシピはここでは変えられない
+  // recipe-db.json を書き換えて保存する（Notion の中継がないときと、移行前のレシピ用）
   async function saveLocal(next: RecipeDB) {
     set({ localDB: next, db: mergeRecipes(get().notionRecipes, next.recipes), isSaving: true, error: null })
     try {
@@ -91,10 +94,17 @@ export const useRecipeStore = create<RecipeStore>((set, get) => {
     }
   }
 
-  function rejectNotionEdit(id: string): boolean {
-    if (!get().isNotionRecipe(id)) return false
-    set({ error: 'Notion のレシピはアプリから編集できません。Notion で編集してください' })
-    return true
+  // Notion に書き込み、結果で notionRecipes を差し替える
+  async function saveNotion(write: (recipes: Recipe[]) => Promise<Recipe[]>) {
+    set({ isSaving: true, error: null })
+    try {
+      const notionRecipes = await write(get().notionRecipes)
+      set({ notionRecipes, db: mergeRecipes(notionRecipes, get().localDB.recipes) })
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : String(e) })
+    } finally {
+      set({ isSaving: false })
+    }
   }
 
   return {
@@ -135,6 +145,10 @@ export const useRecipeStore = create<RecipeStore>((set, get) => {
     },
 
     addRecipe: async (recipe) => {
+      if (isRecipeProxyConfigured()) {
+        await saveNotion(async recipes => [...recipes, await createNotionRecipe(recipe)])
+        return
+      }
       const now = new Date().toISOString()
       const newRecipe: Recipe = {
         ...recipe,
@@ -147,7 +161,16 @@ export const useRecipeStore = create<RecipeStore>((set, get) => {
     },
 
     updateRecipe: async (id, patch) => {
-      if (rejectNotionEdit(id)) return
+      const current = get().notionRecipes.find(r => r.id === id)
+      if (current) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id: _id, createdAt: _c, updatedAt: _u, ...input } = { ...current, ...patch }
+        await saveNotion(async recipes => {
+          const updated = await updateNotionRecipe(id, input)
+          return recipes.map(r => (r.id === id ? updated : r))
+        })
+        return
+      }
       const now = new Date().toISOString()
       const { localDB } = get()
       await saveLocal({
@@ -159,7 +182,13 @@ export const useRecipeStore = create<RecipeStore>((set, get) => {
     },
 
     deleteRecipe: async (id) => {
-      if (rejectNotionEdit(id)) return
+      if (get().isNotionRecipe(id)) {
+        await saveNotion(async recipes => {
+          await deleteNotionRecipe(id)
+          return recipes.filter(r => r.id !== id)
+        })
+        return
+      }
       const { localDB } = get()
       await saveLocal({ ...localDB, recipes: localDB.recipes.filter(r => r.id !== id) })
     },

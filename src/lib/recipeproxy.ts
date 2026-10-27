@@ -67,6 +67,27 @@ export async function fetchNotionRecipes(refresh = false): Promise<Recipe[]> {
   return res.data.recipes.map(toRecipe)
 }
 
+type RecipeInput = Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>
+
+export async function createNotionRecipe(recipe: RecipeInput): Promise<Recipe> {
+  const res = await callProxy<ProxyRecipe>({ action: 'createRecipe', recipe })
+  if (!res.ok) throw new Error(`Recipe proxy error: ${res.error}`)
+  return toRecipe(res.data)
+}
+
+// フォームの内容で上書きする（空にした項目は Notion でも空になる）
+export async function updateNotionRecipe(id: string, recipe: RecipeInput): Promise<Recipe> {
+  const res = await callProxy<ProxyRecipe>({ action: 'updateRecipe', id, recipe })
+  if (!res.ok) throw new Error(`Recipe proxy error: ${res.error}`)
+  return toRecipe(res.data)
+}
+
+// Notion のゴミ箱に移す
+export async function deleteNotionRecipe(id: string): Promise<void> {
+  const res = await callProxy<{ id: string }>({ action: 'deleteRecipe', id })
+  if (!res.ok) throw new Error(`Recipe proxy error: ${res.error}`)
+}
+
 // Notion に入れる。同じ料理名があれば空の項目だけ埋める（中継側で判定）
 export async function importNotionRecipes(recipes: Recipe[]): Promise<ImportResult[]> {
   const res = await callProxy<{ results: ImportResult[] }>({ action: 'importRecipes', recipes })

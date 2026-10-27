@@ -535,7 +535,6 @@ function RecipeCard({
   onEdit,
   onDelete,
   onAddMeal,
-  fromNotion,
   selectable,
   selected,
   onToggleSelect,
@@ -544,7 +543,6 @@ function RecipeCard({
   onEdit: () => void
   onDelete: () => void
   onAddMeal: () => void
-  fromNotion?: boolean        // Notion のレシピは閲覧のみ（編集は Notion で行う）
   selectable?: boolean
   selected?: boolean
   onToggleSelect?: () => void
@@ -571,9 +569,6 @@ function RecipeCard({
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${CATEGORY_COLORS[recipe.category]}`}>
               {CATEGORY_LABELS[recipe.category]}
             </span>
-            {fromNotion && (
-              <span className="text-[10px] text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded-full">Notion</span>
-            )}
             {recipe.tags.map(t => (
               <span key={t} className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{t}</span>
             ))}
@@ -643,24 +638,18 @@ function RecipeCard({
             >
               <UtensilsCrossed size={12} /> 食事に追加
             </button>
-            {fromNotion ? (
-              <span className="self-center text-[10px] text-gray-400">編集は Notion で</span>
-            ) : (
-              <>
-                <button
-                  onClick={onEdit}
-                  className="flex items-center gap-1 text-xs text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition"
-                >
-                  <Pencil size={12} /> 編集
-                </button>
-                <button
-                  onClick={onDelete}
-                  className="flex items-center gap-1 text-xs text-red-400 border border-red-100 rounded-lg px-3 py-1.5 hover:bg-red-50 transition"
-                >
-                  <Trash2 size={12} /> 削除
-                </button>
-              </>
-            )}
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-1 text-xs text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition"
+            >
+              <Pencil size={12} /> 編集
+            </button>
+            <button
+              onClick={onDelete}
+              className="flex items-center gap-1 text-xs text-red-400 border border-red-100 rounded-lg px-3 py-1.5 hover:bg-red-50 transition"
+            >
+              <Trash2 size={12} /> 削除
+            </button>
           </div>
         </div>
       )}
@@ -799,10 +788,14 @@ export default function RecipeDBPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('このレシピを削除しますか？')) {
-      // 紐づく画像ファイルも削除（失敗しても本体削除は続行）
+    const fromNotion = isNotionRecipe(id)
+    const message = fromNotion
+      ? 'このレシピを削除しますか？（Notion のゴミ箱に移ります）'
+      : 'このレシピを削除しますか？'
+    if (window.confirm(message)) {
+      // Notion のレシピはゴミ箱から戻せるので画像は残す。それ以外は画像も削除（失敗しても本体削除は続行）
       const target = db.recipes.find(r => r.id === id)
-      if (target?.imageFileId) await deleteFileFromDrive(target.imageFileId).catch(() => {})
+      if (!fromNotion && target?.imageFileId) await deleteFileFromDrive(target.imageFileId).catch(() => {})
       await deleteRecipe(id)
     }
   }
@@ -944,7 +937,6 @@ export default function RecipeDBPage() {
             onEdit={() => handleEdit(r)}
             onDelete={() => handleDelete(r.id)}
             onAddMeal={() => navigate('/meal', { state: { pendingEntries: [recipeToEntry(r)], mealType: fromMealType } })}
-            fromNotion={isNotionRecipe(r.id)}
             selectable={!!fromMealType}
             selected={selectedIds.has(r.id)}
             onToggleSelect={() => toggleSelect(r.id)}

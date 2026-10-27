@@ -2,6 +2,7 @@
  * fitlog レシピ中継
  *
  * Notion の「DB_レシピリスト」を読み、fitlog の Recipe 形式に変換して返す。
+ * createRecipe・updateRecipe・deleteRecipe でアプリからの追加・編集・削除を Notion に反映する。
  * importRecipes で fitlog の Recipe を Notion に入れる（recipe-db.json からの移行用）。
  * Notion のトークンはスクリプトプロパティに置き、アプリには渡さない。
  *
@@ -12,6 +13,9 @@
  *
  * 呼び出し（POST, Content-Type: text/plain でプリフライトを避ける）:
  *   { "action": "listRecipes", "token": "<Google アクセストークン>", "refresh": false }
+ *   { "action": "createRecipe", "token": "...", "recipe": <Recipe> }           → data: <Recipe>
+ *   { "action": "updateRecipe", "token": "...", "id": "<ページID>", "recipe": <Recipe> } → data: <Recipe>
+ *   { "action": "deleteRecipe", "token": "...", "id": "<ページID>" }           → data: { id }
  *   { "action": "importRecipes", "token": "...", "recipes": [<Recipe>...] }
  * 応答:
  *   { "ok": true, "data": { "version": 1, "recipes": [...], "fetchedAt": "..." } }
@@ -55,6 +59,12 @@ function doPost(e) {
         return json_({ ok: true, data: listRecipes_(req.refresh === true) })
       case 'importRecipes':
         return json_({ ok: true, data: importRecipes_(req.recipes) })
+      case 'createRecipe':
+        return json_({ ok: true, data: createRecipe_(req.recipe) })
+      case 'updateRecipe':
+        return json_({ ok: true, data: updateRecipe_(req.id, req.recipe) })
+      case 'deleteRecipe':
+        return json_({ ok: true, data: deleteRecipe_(req.id) })
       default:
         return json_({ ok: false, error: 'unknown action' })
     }
@@ -161,7 +171,15 @@ function toRecipe_(page) {
   if (sodium !== null) recipe.sodium = sodium
   const ingredients = parseIngredients_(plainText_(p['分量']))
   if (ingredients.length > 0) recipe.ingredients = ingredients
-  const note = plainText_(p['メモ'])
+  // fromRecipe_ がメモの末尾に残した「タグ: …」はタグに戻す
+  let note = plainText_(p['メモ'])
+  const tagLine = note.match(/(?:^|\n)タグ: (.*)$/)
+  if (tagLine) {
+    tagLine[1].split('、').map(t => t.trim()).filter(Boolean).forEach(t => {
+      if (tags.indexOf(t) < 0) tags.push(t)
+    })
+    note = note.slice(0, tagLine.index).trim()
+  }
   if (note) recipe.note = note
   const url = p['URL'] && p['URL'].url
   if (url) recipe.sourceUrl = url
@@ -242,36 +260,86 @@ function importRecipes_(recipes) {
       return { id: recipe.id, status: 'failed', error: message }
     }
   })
-  CacheService.getScriptCache().remove(RECIPES_CACHE_KEY + ':n')
+  clearRecipesCache_()
   return { results: results }
 }
 
-// Recipe → Notion のプロパティ。値のないものは含めない
-function fromRecipe_(r) {
+// ---- 追加・編集・削除 ----
+
+function createRecipe_(recipe) {
+  const created = notion_('post', '/pages', { parent: { database_id: prop_('RECIPE_DB_ID') }, properties: fromRecipe_(recipe) })
+  clearRecipesCache_()
+  return toRecipe_(created)
+}
+
+// アプリのフォームの内容で上書きする。空にした項目は Notion でも空にする。
+// カテゴリーは fitlog の分類が変わったときだけ書き換え（「主菜・副菜」のような複数指定を残す）、
+// 下味冷凍の「不可」と、アプリにない列（曜日・使う材料など）は触らない
+function updateRecipe_(id, recipe) {
+  const page = getRecipePage_(id)
+  const props = fromRecipe_(recipe, true)
+  if (toCategory_(multiSelect_(page.properties['カテゴリー'])) === recipe.category) delete props['カテゴリー']
+  if (!props['下味冷凍'] && select_(page.properties['下味冷凍']) === '可') props['下味冷凍'] = { select: null }
+  const updated = notion_('patch', '/pages/' + page.id, { properties: props })
+  clearRecipesCache_()
+  return toRecipe_(updated)
+}
+
+// Notion のゴミ箱に移す（Notion から元に戻せる）
+function deleteRecipe_(id) {
+  const page = getRecipePage_(id)
+  notion_('patch', '/pages/' + page.id, { archived: true })
+  clearRecipesCache_()
+  return { id: page.id }
+}
+
+// レシピDBのページだけを編集・削除の対象にする（インテグレーションが見える他のページは触らせない）
+function getRecipePage_(id) {
+  if (typeof id !== 'string' || !/^[0-9a-f-]{32,36}$/i.test(id)) throw new Error('invalid id')
+  const page = notion_('get', '/pages/' + id)
+  const parent = page.parent && page.parent.database_id
+  const dbId = prop_('RECIPE_DB_ID')
+  if (!parent || parent.replace(/-/g, '') !== dbId.replace(/-/g, '') || page.archived || page.in_trash) {
+    throw new Error('recipe not found')
+  }
+  return page
+}
+
+function clearRecipesCache_() {
+  CacheService.getScriptCache().remove(RECIPES_CACHE_KEY + ':n')
+}
+
+// Recipe → Notion のプロパティ。値のないものは含めない（clear なら空の値で上書きする）
+function fromRecipe_(r, clear) {
   if (!r || typeof r.name !== 'string' || !r.name.trim()) throw new Error('name is required')
   const props = { '料理名': { title: richText_(r.name.trim()) } }
   props['カテゴリー'] = { multi_select: [{ name: toNotionCategory_(r.category, r.name) }] }
 
   const tags = Array.isArray(r.tags) ? r.tags : []
   if (tags.indexOf('冷凍可') >= 0) props['冷凍可'] = { multi_select: [{ name: '冷凍可' }] }
+  else if (clear) props['冷凍可'] = { multi_select: [] }
   if (tags.indexOf('下味冷凍可') >= 0) props['下味冷凍'] = { select: { name: '可' } }
 
   const numbers = { '人数': r.servings, 'kcal': r.calories, 'たんぱく質': r.protein, '脂質': r.fat, '炭水化物': r.carbs, '食塩相当量': r.sodium }
   Object.keys(numbers).forEach(name => {
     if (typeof numbers[name] === 'number' && isFinite(numbers[name])) props[name] = { number: numbers[name] }
+    else if (clear) props[name] = { number: null }
   })
 
   const ingredients = (Array.isArray(r.ingredients) ? r.ingredients : [])
     .filter(i => i && i.name)
     .map(i => i.amount ? i.name + '｜' + i.amount : i.name)
-  if (ingredients.length) props['分量'] = { rich_text: richText_(ingredients.join('\n')) }
 
   // Notion に列のないタグはメモに残す
   const otherTags = tags.filter(t => t !== '冷凍可' && t !== '下味冷凍可')
   const note = [r.note || '', otherTags.length ? 'タグ: ' + otherTags.join('、') : ''].filter(Boolean).join('\n')
-  if (note) props['メモ'] = { rich_text: richText_(note) }
+  const texts = { '分量': ingredients.join('\n'), 'メモ': note, 'fitlog画像ID': r.imageFileId || '' }
+  Object.keys(texts).forEach(name => {
+    if (texts[name]) props[name] = { rich_text: richText_(texts[name]) }
+    else if (clear) props[name] = { rich_text: [] }
+  })
   if (r.sourceUrl) props['URL'] = { url: r.sourceUrl }
-  if (r.imageFileId) props['fitlog画像ID'] = { rich_text: richText_(r.imageFileId) }
+  else if (clear) props['URL'] = { url: null }
   return props
 }
 
