@@ -5,7 +5,9 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.widget.RemoteViews
+import java.time.LocalDate
 
 class FitlogWidget : AppWidgetProvider() {
 
@@ -46,6 +48,21 @@ class FitlogWidget : AppWidgetProvider() {
                 if (weight != null) "${weight} kg" else "-- kg"
             )
             views.setTextViewText(R.id.widget_date, date ?: "")
+
+            // 運動の状態（最後に同期したのが今日でなければ、まだ運動していない扱いにする）
+            val isToday = date == LocalDate.now().toString()
+            val exerciseDone = isToday && prefs.getBoolean("exerciseDone", false)
+            val exerciseStreak = prefs.getInt("exerciseStreak", 0)
+            val streakText = if (exerciseStreak > 0) "・🔥${exerciseStreak}日連続" else ""
+            views.setTextViewText(
+                R.id.widget_exercise,
+                if (exerciseDone) "💪 今日の運動 ✓$streakText"
+                else "💪 今日の運動まだ（1つだけでOK）$streakText"
+            )
+            views.setTextColor(
+                R.id.widget_exercise,
+                if (exerciseDone) Color.parseColor("#7FFFD4") else Color.parseColor("#FFB74D")
+            )
 
             // ログボタン → アプリ起動
             val launchIntent = Intent(context, MainActivity::class.java).apply {

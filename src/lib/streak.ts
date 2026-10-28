@@ -28,6 +28,14 @@ export function recordedDates(data: AppData): Set<string> {
   ])
 }
 
+/** 運動（有酸素・筋トレ）を記録した日付 */
+export function exerciseDates(data: AppData): Set<string> {
+  return new Set([
+    ...data.cardioLogs.map(c => c.date),
+    ...data.strengthLogs.map(s => s.date),
+  ])
+}
+
 function addDays(date: string, n: number): string {
   const d = new Date(date + 'T00:00:00')
   d.setDate(d.getDate() + n)
@@ -47,7 +55,15 @@ function weekKey(date: string): string {
  * 今日はまだ1日が終わっていないので、未記録でも途切れ扱いにしない。
  */
 export function computeStreak(data: AppData, today: string = localDateStr()): StreakInfo {
-  const dates = recordedDates(data)
+  return computeStreakFromDates(recordedDates(data), today)
+}
+
+/** 運動だけの連続記録（食事・体重の記録では伸びない） */
+export function computeExerciseStreak(data: AppData, today: string = localDateStr()): StreakInfo {
+  return computeStreakFromDates(exerciseDates(data), today)
+}
+
+function computeStreakFromDates(dates: Set<string>, today: string): StreakInfo {
   const sorted = [...dates].filter(d => d <= today).sort()
   const statuses = new Map<string, DayStatus>()
 

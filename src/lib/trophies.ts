@@ -23,6 +23,18 @@ function maxConsecutiveDays(dates: string[]): number {
   return max
 }
 
+/** 1週間（月〜日）の中で記録した日数の最大値 */
+function maxDaysInWeek(dates: string[]): number {
+  const counts = new Map<string, number>()
+  for (const date of new Set(dates)) {
+    const d = new Date(date + 'T00:00:00')
+    d.setDate(d.getDate() - (d.getDay() + 6) % 7) // その週の月曜日
+    const week = d.toDateString()
+    counts.set(week, (counts.get(week) ?? 0) + 1)
+  }
+  return Math.max(0, ...counts.values())
+}
+
 export function computeTrophies(data: AppData): Trophy[] {
   const mealDates   = [...new Set(data.mealLogs.map(m => m.date))]
   const bodyDates   = [...new Set(data.bodyRecords.map(r => r.date))]
@@ -33,6 +45,8 @@ export function computeTrophies(data: AppData): Trophy[] {
 
   const mealStreak  = maxConsecutiveDays(mealDates)
   const bodyStreak  = maxConsecutiveDays(bodyDates)
+  const exStreak    = maxConsecutiveDays(exDates)
+  const exBestWeek  = maxDaysInWeek(exDates)
 
   const goalCal = data.settings.goalCalories ?? 2000
   const calGoalDates = mealDates.filter(date => {
@@ -84,9 +98,34 @@ export function computeTrophies(data: AppData): Trophy[] {
       earned: exDates.length >= 1,
     },
     {
+      id: 'exercise_3day', title: '運動3日連続', icon: '🔥', tier: 'bronze',
+      description: '3日連続で運動を記録',
+      earned: exStreak >= 3,
+    },
+    {
+      id: 'exercise_week3', title: '週3回運動', icon: '📆', tier: 'bronze',
+      description: '1週間（月〜日）で3日以上運動を記録',
+      earned: exBestWeek >= 3,
+    },
+    {
+      id: 'exercise_7day', title: '運動1週間連続', icon: '🏅', tier: 'silver',
+      description: '7日連続で運動を記録',
+      earned: exStreak >= 7,
+    },
+    {
       id: 'exercise_10', title: '運動10日達成', icon: '🏃', tier: 'silver',
       description: '10日以上運動を記録した',
       earned: exDates.length >= 10,
+    },
+    {
+      id: 'exercise_30', title: '運動30日達成', icon: '🎖️', tier: 'gold',
+      description: '30日以上運動を記録した',
+      earned: exDates.length >= 30,
+    },
+    {
+      id: 'exercise_30day', title: '運動1ヶ月連続', icon: '👑', tier: 'gold',
+      description: '30日連続で運動を記録',
+      earned: exStreak >= 30,
     },
     {
       id: 'cal_goal_1', title: 'カロリー目標達成', icon: '🎯', tier: 'bronze',

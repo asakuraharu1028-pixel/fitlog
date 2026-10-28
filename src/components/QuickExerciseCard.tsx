@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAppStore } from '../lib/store'
 import { localDateStr } from '../lib/utils'
+import { computeExerciseStreak } from '../lib/streak'
 import { QUICK_EXERCISES, buildQuickExerciseUpdate, hasExerciseOn, type QuickExercise } from '../lib/quickexercise'
 import { Zap } from 'lucide-react'
 
@@ -11,6 +12,8 @@ export default function QuickExerciseCard({ date = localDateStr() }: { date?: st
   const [savedId, setSavedId] = useState<string | null>(null)
   const doneToday = hasExerciseOn(data, date)
   const isToday = date === localDateStr()
+  // 運動の連続記録は、表示中の日付ではなく実際の今日を基準にする
+  const streak = computeExerciseStreak(data)
 
   const handleTap = async (q: QuickExercise) => {
     if (savingId) return
@@ -25,16 +28,29 @@ export default function QuickExerciseCard({ date = localDateStr() }: { date?: st
     }
   }
 
+  let message: string
+  if (doneToday) {
+    message = `${isToday ? '今日' : 'この日'}は運動済み！もう1つやってもOK`
+  } else if (isToday && streak.current > 0) {
+    message = `1つやると運動 ${streak.current + 1}日連続 に伸びます`
+  } else {
+    message = '1つだけでOK。終わったらタップして記録'
+  }
+
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
-      <div className="flex items-center gap-1.5 mb-1">
-        <Zap size={16} className="text-amber-500" />
-        <h2 className="font-semibold text-gray-700">ちょっとだけ運動</h2>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1.5">
+          <Zap size={16} className="text-amber-500" />
+          <h2 className="font-semibold text-gray-700">ちょっとだけ運動</h2>
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-bold text-orange-500">💪 {streak.current}日連続</p>
+          <p className="text-[10px] text-gray-400">最長 {streak.best}日・🧊残り{streak.freezesLeftThisWeek}回/週</p>
+        </div>
       </div>
-      <p className={`text-xs mb-3 ${doneToday ? 'text-green-600' : 'text-gray-400'}`}>
-        {doneToday
-          ? `${isToday ? '今日' : 'この日'}は運動済み！もう1つやってもOK`
-          : '1つだけでOK。終わったらタップして記録'}
+      <p className={`text-xs mb-3 ${doneToday ? 'text-green-600' : 'text-orange-500 font-semibold'}`}>
+        {message}
       </p>
       <div className="grid grid-cols-2 gap-2">
         {QUICK_EXERCISES.map(q => (

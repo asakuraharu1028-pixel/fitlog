@@ -3,6 +3,7 @@ import { useAppStore } from '../lib/store'
 import { localDateStr } from '../lib/utils'
 import DateSelector from '../components/DateSelector'
 import QuickExerciseCard from '../components/QuickExerciseCard'
+import RepeatLastCard from '../components/RepeatLastCard'
 import {
   CARDIO_DB, STRENGTH_DB,
   calcCardioCalories, calcStrengthCalories, calcVolume, calcTreadmillMet,
@@ -147,6 +148,9 @@ export default function Exercise() {
 
       {/* ちょっとだけ運動 */}
       <QuickExerciseCard date={selectedDate} />
+
+      {/* 前回と同じ（日付を変えたら記録済み表示をリセット） */}
+      <RepeatLastCard key={selectedDate} date={selectedDate} />
 
       {/* AIアドバイス（運動保存後に表示） */}
       {hasApiKey && lastSavedLog && (

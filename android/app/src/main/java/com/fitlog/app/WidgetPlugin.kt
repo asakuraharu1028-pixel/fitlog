@@ -23,6 +23,8 @@ class WidgetPlugin : Plugin() {
         if (call.hasOption("todayBurned"))  editor.putInt("todayBurned",  call.getInt("todayBurned", -1)!!)
         if (call.hasOption("latestWeight")) editor.putString("latestWeight", call.getString("latestWeight"))
         if (call.hasOption("lastUpdated"))  editor.putString("lastUpdated",  call.getString("lastUpdated"))
+        if (call.hasOption("exerciseDone"))   editor.putBoolean("exerciseDone", call.getBoolean("exerciseDone", false)!!)
+        if (call.hasOption("exerciseStreak")) editor.putInt("exerciseStreak", call.getInt("exerciseStreak", 0)!!)
         editor.apply()
 
         // 全ウィジェットを強制更新

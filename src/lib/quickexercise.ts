@@ -58,3 +58,38 @@ export function buildQuickExerciseUpdate(
   }
   return { strengthLogs: [...data.strengthLogs, log] }
 }
+
+/** 前回運動した日の記録（指定日より前で、いちばん新しい日） */
+export interface ExerciseSession {
+  date: string
+  cardio: CardioLog[]
+  strength: StrengthLog[]
+}
+
+export function lastExerciseSession(data: AppData, beforeDate: string): ExerciseSession | null {
+  const dates = [...data.cardioLogs, ...data.strengthLogs].map(l => l.date).filter(d => d < beforeDate)
+  if (dates.length === 0) return null
+  const date = dates.sort().at(-1)!
+  return {
+    date,
+    cardio: data.cardioLogs.filter(c => c.date === date),
+    strength: data.strengthLogs.filter(s => s.date === date),
+  }
+}
+
+/** 過去の記録を、指定日の記録として複製するための差分を作る */
+export function buildRepeatUpdate(
+  logs: { cardio: CardioLog[]; strength: StrengthLog[] }, data: AppData, date: string,
+): Partial<Pick<AppData, 'cardioLogs' | 'strengthLogs'>> {
+  const update: Partial<Pick<AppData, 'cardioLogs' | 'strengthLogs'>> = {}
+  if (logs.cardio.length > 0) {
+    update.cardioLogs = [...data.cardioLogs, ...logs.cardio.map(c => ({ ...c, id: nanoid(), date }))]
+  }
+  if (logs.strength.length > 0) {
+    update.strengthLogs = [
+      ...data.strengthLogs,
+      ...logs.strength.map(s => ({ ...s, id: nanoid(), date, sets: s.sets.map(set => ({ ...set })) })),
+    ]
+  }
+  return update
+}
