@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAppStore } from '../lib/store'
 import { localDateStr } from '../lib/utils'
 import DateSelector from '../components/DateSelector'
+import QuickExerciseCard from '../components/QuickExerciseCard'
 import {
   CARDIO_DB, STRENGTH_DB,
   calcCardioCalories, calcStrengthCalories, calcVolume, calcTreadmillMet,
@@ -143,6 +144,9 @@ export default function Exercise() {
 
       {/* 日付セレクター */}
       <DateSelector date={selectedDate} onChange={setSelectedDate} />
+
+      {/* ちょっとだけ運動 */}
+      <QuickExerciseCard date={selectedDate} />
 
       {/* AIアドバイス（運動保存後に表示） */}
       {hasApiKey && lastSavedLog && (

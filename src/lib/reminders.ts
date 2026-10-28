@@ -3,15 +3,17 @@ import type { AppData, ReminderKind, ReminderSettings } from '../types'
 import type { AdvisorCharacterId } from './characters'
 import { isNative } from './auth'
 import { computeStreak, recordedDates } from './streak'
+import { hasExerciseOn } from './quickexercise'
 import { localDateStr } from './utils'
 
-export const REMINDER_KINDS: ReminderKind[] = ['weight', 'breakfast', 'lunch', 'dinner', 'streak']
+export const REMINDER_KINDS: ReminderKind[] = ['weight', 'breakfast', 'lunch', 'dinner', 'exercise', 'streak']
 
 export const REMINDER_LABELS: Record<ReminderKind, string> = {
   weight:    '⚖️ 体重',
   breakfast: '🍳 朝食',
   lunch:     '🍱 昼食',
   dinner:    '🍽️ 夕食',
+  exercise:  '💪 運動',
   streak:    '🔥 連続記録ピンチ',
 }
 
@@ -20,6 +22,7 @@ const DEFAULT_TIMES: Record<ReminderKind, string> = {
   breakfast: '09:30',
   lunch:     '13:30',
   dinner:    '20:30',
+  exercise:  '19:00',
   streak:    '22:00',
 }
 
@@ -28,6 +31,7 @@ const ROUTES: Record<ReminderKind, string> = {
   breakfast: '/meal',
   lunch:     '/meal',
   dinner:    '/meal',
+  exercise:  '/exercise',
   streak:    '/',
 }
 
@@ -36,6 +40,7 @@ const TITLES: Record<Exclude<ReminderKind, 'streak'>, string> = {
   breakfast: '🍳 朝食の記録がまだです',
   lunch:     '🍱 昼食の記録がまだです',
   dinner:    '🍽️ 夕食の記録がまだです',
+  exercise:  '💪 今日の運動、1つだけやりませんか',
 }
 
 // 通知本文は選択中のアドバイザーキャラのセリフにする（API を呼ばない固定文）
@@ -45,6 +50,7 @@ const MESSAGES: Record<AdvisorCharacterId, Record<ReminderKind, string>> = {
     breakfast: '朝食の記録がまだのようです。食べなかった場合も「食べなかった」で記録できます。',
     lunch:     '昼食の記録をお願いします。写真を撮るだけでも大丈夫です。',
     dinner:    '夕食の記録はお済みですか？今日の振り返りにもなります。',
+    exercise:  'スクワット10回やストレッチ5分だけでも十分です。終わったらワンタップで記録できます。',
     streak:    '今日はまだ記録がありません。何か1件だけでも記録して連続を守りましょう。',
   },
   kenmochi: {
@@ -52,6 +58,7 @@ const MESSAGES: Record<AdvisorCharacterId, Record<ReminderKind, string>> = {
     breakfast: '朝食の記録がないんですが。食べてないのか、記録を怠っただけなのか、どっちですか。',
     lunch:     '昼食、記録してないでしょ。写真1枚撮るだけの作業がそんなに億劫ですか。',
     dinner:    '夕食の記録がまだですね。一日の締めくくりくらいちゃんとしましょうよ。',
+    exercise:  '今日まだ一度も体を動かしてないですよね。スクワット10回すらできないとは言わせませんよ。',
     streak:    'は？今日まだ何も記録してないんですか。積み上げた連続記録を自ら捨てる気ですか。',
   },
   gaku: {
@@ -59,6 +66,7 @@ const MESSAGES: Record<AdvisorCharacterId, Record<ReminderKind, string>> = {
     breakfast: '朝ごはん食べました？記録しとくと後でマジ楽っすよ！',
     lunch:     'お昼の記録まだっすね！写真パシャっと撮るだけでOKっす🕺',
     dinner:    '晩ごはんお疲れさまです！記録して今日も締めましょ✌️',
+    exercise:  'ちょっとだけ体動かしません？スクワット10回でOKっす、一緒にやりましょ💪',
     streak:    '今日の記録まだっすけど大丈夫ですか？1件だけでいいんで、連続記録守りましょ！',
   },
   togabito: {
@@ -66,6 +74,7 @@ const MESSAGES: Record<AdvisorCharacterId, Record<ReminderKind, string>> = {
     breakfast: '剣持：朝食の記録がないんですけど。\nガク：食べてなくても「食べなかった」で記録できますよ！',
     lunch:     '剣持：昼食の記録、まさか忘れてないですよね。\nガク：写真撮るだけでOKっす🕺',
     dinner:    '剣持：夕食の記録で一日が完結するんですよ。\nガク：今日も最後まで頑張りましょ！',
+    exercise:  '剣持：今日、運動しました？してないですよね。\nガク：ストレッチ5分だけでも全然アリっすよ！',
     streak:    '剣持：連続記録、今日で途切れさせる気ですか？\nガク：1件だけでいいんで記録しましょ、応援してます✌️',
   },
   domoto: {
@@ -73,6 +82,7 @@ const MESSAGES: Record<AdvisorCharacterId, Record<ReminderKind, string>> = {
     breakfast: '光一：朝飯の記録ないやん。お前何してんねん。\n剛：朝は大事やからなぁ。食べたんやったら残しとこ。',
     lunch:     '光一：昼の記録まだか。管理する気あるんか。\n剛：写真撮るだけでええねんて、あなた。',
     dinner:    '光一：晩飯の記録で一日が締まるんや。\n剛：今日のごはん、何やったんやろなぁ。',
+    exercise:  '光一：今日まだ体動かしてへんやろ。スクワット10回くらいやれるやろ。\n剛：ちょっと伸びするだけでも、気持ちええもんやで。',
     streak:    '光一：今日まだ何も記録してへんやん。こんなん続ける気ないのと一緒や。\n剛：まあでも、1個だけでも書いたら繋がるんちゃうかなぁ。',
   },
 }
@@ -101,6 +111,7 @@ const CHANNEL_ID = 'reminders'
 function isRecorded(data: AppData, kind: ReminderKind, date: string): boolean {
   switch (kind) {
     case 'weight': return data.bodyRecords.some(r => r.date === date)
+    case 'exercise': return hasExerciseOn(data, date)
     case 'streak': return recordedDates(data).has(date)
     default:       return data.mealLogs.some(m => m.date === date && m.mealType === kind)
   }

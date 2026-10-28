@@ -208,7 +208,7 @@ export interface PeriodLog {
   notes?: string
 }
 
-export type ReminderKind = 'weight' | 'breakfast' | 'lunch' | 'dinner' | 'streak'
+export type ReminderKind = 'weight' | 'breakfast' | 'lunch' | 'dinner' | 'exercise' | 'streak'
 
 export interface ReminderSettings {
   enabled: boolean

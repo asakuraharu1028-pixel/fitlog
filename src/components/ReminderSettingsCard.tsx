@@ -93,6 +93,9 @@ export default function ReminderSettingsCard() {
               )
             })}
             <p className="text-xs text-gray-400">
+              💪 運動：その日まだ運動を記録していないときに通知します（タップで運動画面へ）
+            </p>
+            <p className="text-xs text-gray-400">
               🔥 連続記録ピンチ：その日まだ何も記録していないときに通知します
             </p>
           </div>

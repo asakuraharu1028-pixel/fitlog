@@ -6,6 +6,7 @@ import { hasAiKey } from '../lib/ai'
 import type { AdviceLog } from '../types'
 import { computeTrophies, TIER_COLORS } from '../lib/trophies'
 import { computeStreak, type DayStatus } from '../lib/streak'
+import QuickExerciseCard from '../components/QuickExerciseCard'
 import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy } from 'lucide-react'
 import type { AppData } from '../types'
 
@@ -131,6 +132,9 @@ export default function Home() {
 
       {/* 連続記録 */}
       <StreakCard data={data} today={today} />
+
+      {/* ちょっとだけ運動 */}
+      <QuickExerciseCard date={today} />
 
       {/* カロリーサマリー */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
