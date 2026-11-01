@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 運動ウィジェット：今日は運動済み -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#FF4CC26A"
+        android:endColor="#FF1E8E4E" />
+    <corners android:radius="22dp" />
+</shape>

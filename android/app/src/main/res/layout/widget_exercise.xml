@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 運動の連続記録ウィジェット。連続日数をいちばん大きく見せ、背景色で今日の状態を伝える -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ex_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_exercise_bg_pending"
+    android:padding="12dp">
+
+    <!-- 見出し -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="💪 運動"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:textColor="#DDFFFFFF" />
+
+        <TextView
+            android:id="@+id/ex_best"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="最長 --日"
+            android:textSize="10sp"
+            android:textColor="#CCFFFFFF" />
+    </LinearLayout>
+
+    <!-- 連続日数（ウィジェットの大きさに合わせて文字サイズが変わる） -->
+    <TextView
+        android:id="@+id/ex_streak"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:text="🔥--"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:gravity="center"
+        android:maxLines="1"
+        android:includeFontPadding="false"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="28sp"
+        android:autoSizeMaxTextSize="96sp"
+        android:autoSizeStepGranularity="2sp" />
+
+    <TextView
+        android:id="@+id/ex_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="日連続・途切れさせないで！"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <!-- 直近7日 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp">
+
+        <TextView android:id="@+id/ex_day0" style="@style/ExerciseWidgetDay" />
+        <TextView android:id="@+id/ex_day1" style="@style/ExerciseWidgetDay" />
+        <TextView android:id="@+id/ex_day2" style="@style/ExerciseWidgetDay" />
+        <TextView android:id="@+id/ex_day3" style="@style/ExerciseWidgetDay" />
+        <TextView android:id="@+id/ex_day4" style="@style/ExerciseWidgetDay" />
+        <TextView android:id="@+id/ex_day5" style="@style/ExerciseWidgetDay" />
+        <TextView android:id="@+id/ex_day6" style="@style/ExerciseWidgetDay" />
+    </LinearLayout>
+
+</LinearLayout>

@@ -17,6 +17,7 @@ import { HashRouter, Routes, Route } from 'react-router-dom'
 import { useAppStore } from './lib/store'
 import { isNative, initAuth, signIn, signInSilent } from './lib/auth'
 import { initReminderListeners } from './lib/reminders'
+import { initWidgetListeners } from './lib/widget'
 import LoginScreen from './components/LoginScreen'
 import Layout from './components/Layout'
 
@@ -44,12 +45,15 @@ function PageLoading() {
 }
 
 export default function App() {
-  const { isAuthenticated, setAuthenticated, loadData } = useAppStore()
+  const isAuthenticated = useAppStore((s) => s.isAuthenticated)
   const [sdkReady, setSdkReady] = useState(isNative)
 
+  // 起動時に1回だけ実行する（isAuthenticated に依存させると、ログイン直後に再実行されて読み込みが二重になる）
   useEffect(() => {
+    const { setAuthenticated, loadData } = useAppStore.getState()
     if (isNative) {
       initReminderListeners()
+      initWidgetListeners()
       initAuth().then(() => {
         signInSilent().then((token) => {
           if (token) { setAuthenticated(true); loadData() }
@@ -62,7 +66,7 @@ export default function App() {
     script.async = true
     script.onload = () => {
       setSdkReady(true)
-      if (!isAuthenticated) {
+      if (!useAppStore.getState().isAuthenticated) {
         initAuth().then(() => {
           signIn()
             .then(() => { setAuthenticated(true); loadData() })
@@ -72,7 +76,7 @@ export default function App() {
     }
     document.body.appendChild(script)
     return () => { document.body.removeChild(script) }
-  }, [isAuthenticated, setAuthenticated, loadData])
+  }, [])
 
   // OAuthコールバックはログイン状態に関係なく表示
   return (

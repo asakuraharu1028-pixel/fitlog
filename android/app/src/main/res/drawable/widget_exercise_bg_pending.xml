@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 運動ウィジェット：連続中で今日まだ（途切れそう） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#FFFF8A3D"
+        android:endColor="#FFE53935" />
+    <corners android:radius="22dp" />
+</shape>

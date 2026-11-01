@@ -20,6 +20,10 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(HealthConnectPlugin.class);
         registerPlugin(WidgetPlugin.class);
+        // 復元時（プロセス終了後など）は起動時の Intent がそのまま戻るので、処理済みのウィジェットの画面指定を消す
+        if (savedInstanceState != null) {
+            getIntent().removeExtra(WidgetPlugin.EXTRA_ROUTE);
+        }
         super.onCreate(savedInstanceState);
 
         // WebView からのカメラ権限リクエストを許可
