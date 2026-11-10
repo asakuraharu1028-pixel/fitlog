@@ -4,6 +4,7 @@ import { loadFromDrive, saveToDrive } from './google'
 import { localDateStr } from './utils'
 import { syncWidgetData } from './widget'
 import { syncReminders } from './reminders'
+import { mergeRewards } from './rewards'
 
 // id フィールドを持つレコードをマージ（ローカル優先、どちらにしかないものも保持）
 function mergeById<T extends { id: string }>(local: T[], remote: T[]): T[] {
@@ -42,6 +43,11 @@ function mergeSleepLogs(local: SleepLog[], remote: SleepLog[]): SleepLog[] {
 function mergeData(local: AppData, remote: AppData): AppData {
   return {
     ...remote, // settings 等は Drive 側を優先
+    // ご褒美の受け取り記録などが Drive 側の古い settings で消えないよう、節目ごとに新しい方を残す
+    settings: {
+      ...remote.settings,
+      rewards: mergeRewards(local.settings?.rewards, remote.settings?.rewards),
+    },
     mealLogs:     mergeById(local.mealLogs,     remote.mealLogs),
     bodyRecords:  mergeById(local.bodyRecords,  remote.bodyRecords),
     cardioLogs:   mergeById(local.cardioLogs,   remote.cardioLogs),

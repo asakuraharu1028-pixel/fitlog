@@ -9,6 +9,7 @@ type Gender = 'male' | 'female'
 import { isNative } from '../lib/auth'
 import ReminderSettingsCard from '../components/ReminderSettingsCard'
 import SelfCareSettingsCard from '../components/SelfCareSettingsCard'
+import RewardSettingsCard from '../components/RewardSettingsCard'
 import AiSettingsCard from '../components/AiSettingsCard'
 import {
   hcCheckAvailability, hcCheckPermissions, hcOpenPermissions,
@@ -147,7 +148,9 @@ export default function Settings() {
     setGoalMonths(String(s.goalMonths ?? ''))
     setPolicy(s.dietPolicy ?? 'balance')
     setActivityLevel(s.activityLevel ?? 'moderate')
-  }, [s])
+    // settings 全体を見ると、ご褒美・セルフケアなど別カードの保存でも未保存の入力が巻き戻るので、
+    // このフォームの項目が変わったときだけ同期する
+  }, [s.heightCm, s.gender, s.age, s.goalWeightKg, s.bmr, s.goalMonths, s.dietPolicy, s.activityLevel])
 
   // 最新の体重レコード
   const latestWeight = useMemo(() => {
@@ -454,6 +457,9 @@ export default function Settings() {
 
       {/* セルフケア項目 */}
       <SelfCareSettingsCard />
+
+      {/* ご褒美 */}
+      <RewardSettingsCard />
 
       {/* 記録リマインド通知 */}
       <ReminderSettingsCard />

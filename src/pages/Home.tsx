@@ -8,6 +8,7 @@ import { computeTrophies, TIER_COLORS } from '../lib/trophies'
 import { computeAllStreaks, STREAK_CATEGORIES, STREAK_CATEGORY_META, type DayStatus, type StreakCategory, type StreakInfo } from '../lib/streak'
 import QuickExerciseCard from '../components/QuickExerciseCard'
 import SelfCareCard from '../components/SelfCareCard'
+import RewardCard from '../components/RewardCard'
 import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy } from 'lucide-react'
 import type { AppData } from '../types'
 
@@ -133,6 +134,9 @@ export default function Home() {
 
       {/* 連続記録 */}
       <StreakCard data={data} today={today} />
+
+      {/* ご褒美 */}
+      <RewardCard />
 
       {/* セルフケア（歯磨き・入浴・スキンケア） */}
       <SelfCareCard />
@@ -498,18 +502,19 @@ function StreakRow({ category, streak, today }: { category: StreakCategory; stre
 
   return (
     <div className="flex items-center gap-2 py-2" title={meta.hint}>
-      <div className="w-20 shrink-0">
+      <div className="w-[5.5rem] shrink-0 whitespace-nowrap">
         <p className="text-xs text-gray-600">{meta.icon} {meta.label}</p>
         <p className="text-[10px] text-gray-400">最長{streak.best}・🧊{streak.freezesLeftThisWeek}</p>
       </div>
-      <div className="w-12 shrink-0 text-right">
+      <div className="w-14 shrink-0 text-right whitespace-nowrap">
         <span className="text-xl font-bold text-orange-500">{streak.current}</span>
         <span className="text-[10px] text-gray-500">日</span>
       </div>
-      <div className="flex-1 flex justify-between pl-1">
+      {/* 画面が狭いときは丸が縮む（幅は最大 1.5rem） */}
+      <div className="flex-1 min-w-0 grid grid-cols-7 gap-0.5 pl-1">
         {streak.recent.map(({ date, status }) => (
-          <div key={date} className="flex flex-col items-center gap-0.5">
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] ${DAY_STATUS_STYLE[status]}`}>
+          <div key={date} className="flex flex-col items-center gap-0.5 min-w-0">
+            <span className={`w-full max-w-6 aspect-square rounded-full flex items-center justify-center text-[11px] ${DAY_STATUS_STYLE[status]}`}>
               {status === 'recorded' ? '✓' : status === 'frozen' ? '🧊' : ''}
             </span>
             <span className={`text-[9px] ${date === today ? 'text-orange-500 font-bold' : 'text-gray-400'}`}>

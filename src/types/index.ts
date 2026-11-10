@@ -245,6 +245,25 @@ export interface CareLog {
   createdAt: string   // ISO8601
 }
 
+/** ご褒美の節目（4項目の累計記録日数の平均が days に届いたらもらえる） */
+export interface RewardMilestone {
+  id: string
+  days: number
+  label: string
+  /** 受け取った日時（ISO8601）。未受け取りなら undefined */
+  claimedAt?: string
+  /** 最後に変更した日時（ISO8601）。Drive とのマージで新しい方を残すのに使う */
+  updatedAt?: string
+}
+
+export interface RewardSettings {
+  /** 数え始める日 YYYY-MM-DD（この日以降の記録だけを数える） */
+  startDate: string
+  /** startDate を最後に変更した日時（ISO8601） */
+  updatedAt?: string
+  milestones: RewardMilestone[]
+}
+
 export interface AppData {
   bodyRecords: BodyRecord[]
   mealLogs: MealLog[]
@@ -280,5 +299,7 @@ export interface AppData {
     reminders?: ReminderSettings
     /** セルフケア項目（未設定なら既定の項目を使う） */
     careItems?: CareItem[]
+    /** ご褒美（4項目の累計記録日数の平均で判定） */
+    rewards?: RewardSettings
   }
 }
