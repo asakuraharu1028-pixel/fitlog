@@ -8,6 +8,7 @@ import type { BodyRecord, DietPolicy, ActivityLevel } from '../types'
 type Gender = 'male' | 'female'
 import { isNative } from '../lib/auth'
 import ReminderSettingsCard from '../components/ReminderSettingsCard'
+import SelfCareSettingsCard from '../components/SelfCareSettingsCard'
 import AiSettingsCard from '../components/AiSettingsCard'
 import {
   hcCheckAvailability, hcCheckPermissions, hcOpenPermissions,
@@ -450,6 +451,9 @@ export default function Settings() {
           })}
         </div>
       </div>
+
+      {/* セルフケア項目 */}
+      <SelfCareSettingsCard />
 
       {/* 記録リマインド通知 */}
       <ReminderSettingsCard />

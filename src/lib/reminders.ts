@@ -5,6 +5,7 @@ import { isNative } from './auth'
 import { computeStreak, recordedDates } from './streak'
 import { hasExerciseOn } from './quickexercise'
 import { localDateStr } from './utils'
+import { careLogOn, resolveCareItems } from './selfcare'
 
 export const REMINDER_KINDS: ReminderKind[] = ['weight', 'breakfast', 'lunch', 'dinner', 'exercise', 'streak']
 
@@ -87,6 +88,15 @@ const MESSAGES: Record<AdvisorCharacterId, Record<ReminderKind, string>> = {
   },
 }
 
+// セルフケアは「責められるとやめたくなる」習慣なので、どのキャラも最低ラインを勧める優しめの文にする
+const CARE_MESSAGES: Record<AdvisorCharacterId, (minimum: string) => string> = {
+  default:  min => `${min}だけでも「できた」です。終わったらタップで記録できます。`,
+  kenmochi: min => `${min}だけでいいですよ。それくらいなら、さすがにできるでしょう。`,
+  gaku:     min => `${min}だけでOKっす！サクッとやっちゃいましょ✌️`,
+  togabito: min => `剣持：${min}だけでいいんですよ。\nガク：それだけでも立派っす！`,
+  domoto:   min => `光一：${min}だけでええねん。\n剛：ちょっとやったら、気持ちええで。`,
+}
+
 export type ResolvedReminderSettings = {
   enabled: boolean
   items: Record<ReminderKind, { enabled: boolean; time: string }>
@@ -106,7 +116,41 @@ const DAYS_AHEAD = 14
 // 他の通知と ID が被らないようにするための範囲
 const ID_BASE = 10000
 const ID_MAX  = ID_BASE + DAYS_AHEAD * 10
+// セルフケア通知の ID 範囲（1日あたり最大 CARE_PER_DAY 項目）
+const CARE_ID_BASE = 20000
+const CARE_PER_DAY = 50
+const CARE_ID_MAX  = CARE_ID_BASE + DAYS_AHEAD * CARE_PER_DAY
 const CHANNEL_ID = 'reminders'
+
+// セルフケアを使い始めて一定日数たったら、フェーズ2（NFC・通知から記録）を検討する合図を1回だけ出す
+const PHASE2_ID = 30000
+const PHASE2_AFTER_DAYS = 14
+const PHASE2_TIME = '20:00'
+
+const isOurId = (id: number) =>
+  (id >= ID_BASE && id < ID_MAX) || (id >= CARE_ID_BASE && id < CARE_ID_MAX) || id === PHASE2_ID
+
+/** 最初のセルフケア記録から PHASE2_AFTER_DAYS 日後の通知。すでに過ぎていれば null */
+function phase2Notification(data: AppData, now: Date): LocalNotificationSchema | null {
+  const first = (data.careLogs ?? []).map(l => l.date).sort()[0]
+  if (!first) return null
+  const [h, m] = PHASE2_TIME.split(':').map(Number)
+  const at = new Date(first + 'T00:00:00')
+  at.setDate(at.getDate() + PHASE2_AFTER_DAYS)
+  at.setHours(h, m, 0, 0)
+  if (at <= now) return null
+  const body = `セルフケアを記録し始めて${PHASE2_AFTER_DAYS}日たちました。` +
+    'ホームの実施率を見て、記録が面倒で抜けているならフェーズ2（NFCタグ・通知から記録）に進む時期です。'
+  return {
+    id: PHASE2_ID,
+    title: '🌱 セルフケア：フェーズ2を検討するタイミングです',
+    body,
+    largeBody: body,
+    channelId: CHANNEL_ID,
+    schedule: { at, allowWhileIdle: true },
+    extra: { route: '/' },
+  }
+}
 
 function isRecorded(data: AppData, kind: ReminderKind, date: string): boolean {
   switch (kind) {
@@ -150,7 +194,31 @@ function buildSchedule(data: AppData): LocalNotificationSchema[] {
         extra: { route: ROUTES[kind] },
       })
     })
+
+    // セルフケア（育成中・定着済みで通知ONの項目）
+    resolveCareItems(data)
+      .filter(item => item.status !== 'paused' && item.reminderEnabled)
+      .slice(0, CARE_PER_DAY)
+      .forEach((item, i) => {
+        const [h, m] = (item.reminderTime ?? '21:00').split(':').map(Number)
+        const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + day, h, m)
+        if (at <= now) return
+        if (day === 0 && careLogOn(data, item.id, today)) return
+        const body = CARE_MESSAGES[character](item.minimum || '少しだけ')
+        notifications.push({
+          id: CARE_ID_BASE + day * CARE_PER_DAY + i,
+          title: item.anchor ? `${item.icon} ${item.anchor}、${item.label}` : `${item.icon} ${item.label}の時間です`,
+          body,
+          largeBody: body,
+          channelId: CHANNEL_ID,
+          schedule: { at, allowWhileIdle: true },
+          extra: { route: '/' },
+        })
+      })
   }
+
+  const phase2 = phase2Notification(data, now)
+  if (phase2) notifications.push(phase2)
   return notifications
 }
 
@@ -188,7 +256,7 @@ export function syncReminders(data: AppData): Promise<void> {
       }
 
       const { notifications: pending } = await LocalNotifications.getPending()
-      const ours = pending.filter(n => n.id >= ID_BASE && n.id < ID_MAX)
+      const ours = pending.filter(n => isOurId(n.id))
       if (ours.length > 0) await LocalNotifications.cancel({ notifications: ours.map(n => ({ id: n.id })) })
       if (notifications.length > 0) await LocalNotifications.schedule({ notifications })
       lastKey = key

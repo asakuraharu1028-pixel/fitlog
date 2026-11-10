@@ -216,6 +216,35 @@ export interface ReminderSettings {
   items: Partial<Record<ReminderKind, { enabled: boolean; time: string }>>
 }
 
+/** セルフケア項目の状態（育成中=ホームで大きく表示 / 定着済み=小さく表示 / お休み=非表示） */
+export type CareStatus = 'growing' | 'established' | 'paused'
+
+/** 歯磨き・入浴・スキンケアなどのセルフケア項目 */
+export interface CareItem {
+  id: string
+  icon: string
+  label: string
+  /** きっかけにする既存の行動（例: "コーヒーを淹れたら"） */
+  anchor: string
+  /** これだけやれば「できた」にする最低ライン（例: "1本だけ磨く"） */
+  minimum: string
+  /** ちゃんとやる版（例: "全部の歯を2分"） */
+  full: string
+  status: CareStatus
+  /** 通知を出すか（Android のみ） */
+  reminderEnabled?: boolean
+  /** 通知時刻 HH:MM */
+  reminderTime?: string
+}
+
+export interface CareLog {
+  id: string
+  date: string        // YYYY-MM-DD
+  itemId: string
+  level: 'min' | 'full'
+  createdAt: string   // ISO8601
+}
+
 export interface AppData {
   bodyRecords: BodyRecord[]
   mealLogs: MealLog[]
@@ -226,6 +255,7 @@ export interface AppData {
   stepLogs: StepLog[]
   adviceLogs: AdviceLog[]
   periodLogs?: PeriodLog[]
+  careLogs?: CareLog[]
   settings: {
     heightCm: number
     /** 性別 */
@@ -248,5 +278,7 @@ export interface AppData {
     advisorCharacter?: 'default' | 'kenmochi' | 'gaku' | 'togabito' | 'domoto'
     /** 記録リマインド通知 */
     reminders?: ReminderSettings
+    /** セルフケア項目（未設定なら既定の項目を使う） */
+    careItems?: CareItem[]
   }
 }

@@ -51,6 +51,7 @@ function mergeData(local: AppData, remote: AppData): AppData {
     stepLogs:     mergeStepLogs(local.stepLogs ?? [], remote.stepLogs ?? []),
     templateFoods: mergeById(local.templateFoods ?? [], remote.templateFoods ?? []),
     periodLogs:   mergeById(local.periodLogs ?? [], remote.periodLogs ?? []),
+    careLogs:     mergeById(local.careLogs ?? [], remote.careLogs ?? []),
   }
 }
 
@@ -80,6 +81,7 @@ function migrateUtcDates(data: AppData): AppData {
     sleepLogs:   (data.sleepLogs ?? []).map(r => ({ ...r, date: fixDate(r.date) })),
     stepLogs:    (data.stepLogs  ?? []).map(r => ({ ...r, date: fixDate(r.date) })),
     adviceLogs:  (data.adviceLogs ?? []).map(r => ({ ...r, date: fixDate(r.date) })),
+    careLogs:    (data.careLogs ?? []).map(r => ({ ...r, date: fixDate(r.date) })),
   }
 }
 
@@ -93,6 +95,7 @@ const DEFAULT_DATA: AppData = {
   sleepLogs: [],
   stepLogs: [],
   adviceLogs: [],
+  careLogs: [],
   settings: { heightCm: 170 },
 }
 

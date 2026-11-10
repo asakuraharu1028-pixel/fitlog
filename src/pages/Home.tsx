@@ -7,6 +7,7 @@ import type { AdviceLog } from '../types'
 import { computeTrophies, TIER_COLORS } from '../lib/trophies'
 import { computeStreak, type DayStatus } from '../lib/streak'
 import QuickExerciseCard from '../components/QuickExerciseCard'
+import SelfCareCard from '../components/SelfCareCard'
 import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy } from 'lucide-react'
 import type { AppData } from '../types'
 
@@ -132,6 +133,9 @@ export default function Home() {
 
       {/* 連続記録 */}
       <StreakCard data={data} today={today} />
+
+      {/* セルフケア（歯磨き・入浴・スキンケア） */}
+      <SelfCareCard />
 
       {/* ちょっとだけ運動 */}
       <QuickExerciseCard date={today} />
