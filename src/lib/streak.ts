@@ -31,7 +31,26 @@ export const STREAK_CATEGORY_META: Record<StreakCategory, { icon: string; label:
 }
 
 /** カテゴリごとの「記録した日」 */
-export function categoryDates(data: AppData, category: StreakCategory): Set<string> {
+// AppData は保存のたびに新しいオブジェクトになるので、同じ data なら集計結果を使い回す
+// （ホームの連続記録・ご褒美、ウィジェット、通知で同じ計算を何度もしないため）
+const datesCache = new WeakMap<AppData, Map<StreakCategory, ReadonlySet<string>>>()
+
+/** カテゴリごとの「記録した日」（同じ data なら前回の結果を返す。変更しないこと） */
+export function categoryDates(data: AppData, category: StreakCategory): ReadonlySet<string> {
+  let byCategory = datesCache.get(data)
+  if (!byCategory) {
+    byCategory = new Map()
+    datesCache.set(data, byCategory)
+  }
+  let dates = byCategory.get(category)
+  if (!dates) {
+    dates = buildCategoryDates(data, category)
+    byCategory.set(category, dates)
+  }
+  return dates
+}
+
+function buildCategoryDates(data: AppData, category: StreakCategory): Set<string> {
   switch (category) {
     case 'exercise':
       return new Set([
@@ -57,7 +76,7 @@ export function recordedDates(data: AppData): Set<string> {
 }
 
 /** 運動（有酸素・筋トレ）を記録した日付 */
-export function exerciseDates(data: AppData): Set<string> {
+export function exerciseDates(data: AppData): ReadonlySet<string> {
   return categoryDates(data, 'exercise')
 }
 
@@ -99,7 +118,7 @@ export function computeExerciseStreak(data: AppData, today: string = localDateSt
   return computeCategoryStreak(data, 'exercise', today)
 }
 
-function computeStreakFromDates(dates: Set<string>, today: string): StreakInfo {
+function computeStreakFromDates(dates: ReadonlySet<string>, today: string): StreakInfo {
   const sorted = [...dates].filter(d => d <= today).sort()
   const statuses = new Map<string, DayStatus>()
 

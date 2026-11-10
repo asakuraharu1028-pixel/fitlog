@@ -1,7 +1,5 @@
 package com.fitlog.app
 
-import android.appwidget.AppWidgetManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import com.getcapacitor.JSObject
@@ -41,14 +39,9 @@ class WidgetPlugin : Plugin() {
         editor.apply()
 
         // 全ウィジェットを強制更新
-        val manager = AppWidgetManager.getInstance(context)
-        val ids = manager.getAppWidgetIds(ComponentName(context, FitlogWidget::class.java))
-        for (id in ids) {
-            FitlogWidget.updateWidget(context, manager, id)
-        }
-        val streakCount = StreakWidget.updateAll(context, manager)
+        val updated = FitlogWidget.updateAllWidgets(context)
 
-        call.resolve(JSObject().put("updated", ids.size + streakCount))
+        call.resolve(JSObject().put("updated", updated))
     }
 
     /** ウィジェットからアプリを起動したときの画面を返し、二重に処理しないよう消す */

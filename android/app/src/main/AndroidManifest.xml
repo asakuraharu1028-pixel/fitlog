@@ -53,6 +53,15 @@
                 android:resource="@xml/widget_fitlog_info" />
         </receiver>
 
+        <!-- アプリ更新時に全ウィジェットを描き直す -->
+        <receiver
+            android:name=".WidgetRefreshReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <!-- 運動の連続記録ウィジェット -->
         <receiver
             android:name=".ExerciseWidget"

@@ -3,6 +3,7 @@ package com.fitlog.app
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -22,6 +23,14 @@ class FitlogWidget : AppWidgetProvider() {
     }
 
     companion object {
+        /** 配置済みの全ウィジェット（カロリー・連続記録4種）を描き直し、更新した数を返す */
+        fun updateAllWidgets(context: Context): Int {
+            val manager = AppWidgetManager.getInstance(context)
+            val ids = manager.getAppWidgetIds(ComponentName(context, FitlogWidget::class.java))
+            for (id in ids) updateWidget(context, manager, id)
+            return ids.size + StreakWidget.updateAll(context, manager)
+        }
+
         fun updateWidget(
             context: Context,
             appWidgetManager: AppWidgetManager,

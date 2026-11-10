@@ -20,10 +20,12 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="💪 運動"
+            android:text="🔥 連続記録"
             android:textSize="11sp"
             android:textStyle="bold"
-            android:textColor="#DDFFFFFF" />
+            android:textColor="#DDFFFFFF"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <TextView
             android:id="@+id/ex_best"
@@ -31,7 +33,9 @@
             android:layout_height="wrap_content"
             android:text="最長 --日"
             android:textSize="10sp"
-            android:textColor="#CCFFFFFF" />
+            android:textColor="#CCFFFFFF"
+            android:maxLines="1"
+            android:layout_marginStart="4dp" />
     </LinearLayout>
 
     <!-- 連続日数（ウィジェットの大きさに合わせて文字サイズが変わる） -->
@@ -47,7 +51,7 @@
         android:maxLines="1"
         android:includeFontPadding="false"
         android:autoSizeTextType="uniform"
-        android:autoSizeMinTextSize="28sp"
+        android:autoSizeMinTextSize="12sp"
         android:autoSizeMaxTextSize="96sp"
         android:autoSizeStepGranularity="2sp" />
 
@@ -55,7 +59,7 @@
         android:id="@+id/ex_status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="日連続・途切れさせないで！"
+        android:text="アプリを開くと表示されます"
         android:textSize="13sp"
         android:textStyle="bold"
         android:textColor="#FFFFFF"
