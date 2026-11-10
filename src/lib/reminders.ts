@@ -2,7 +2,7 @@ import { LocalNotifications, type LocalNotificationSchema } from '@capacitor/loc
 import type { AppData, ReminderKind, ReminderSettings } from '../types'
 import type { AdvisorCharacterId } from './characters'
 import { isNative } from './auth'
-import { computeStreak, recordedDates } from './streak'
+import { computeAllStreaks, recordedDates, STREAK_CATEGORIES, STREAK_CATEGORY_META, type StreakCategory } from './streak'
 import { hasExerciseOn } from './quickexercise'
 import { localDateStr } from './utils'
 import { careLogOn, resolveCareItems } from './selfcare'
@@ -156,9 +156,16 @@ function isRecorded(data: AppData, kind: ReminderKind, date: string): boolean {
   switch (kind) {
     case 'weight': return data.bodyRecords.some(r => r.date === date)
     case 'exercise': return hasExerciseOn(data, date)
-    case 'streak': return recordedDates(data).has(date)
+    // 連続中のカテゴリがすべて記録済みで、今日なにか1件でも記録がある
+    case 'streak': return atRiskCategories(data, date).length === 0 && recordedDates(data).has(date)
     default:       return data.mealLogs.some(m => m.date === date && m.mealType === kind)
   }
+}
+
+/** 連続中なのに今日まだ記録していないカテゴリ */
+function atRiskCategories(data: AppData, today: string): StreakCategory[] {
+  const streaks = computeAllStreaks(data, today)
+  return STREAK_CATEGORIES.filter(c => streaks[c].current > 0 && !streaks[c].todayRecorded)
 }
 
 function buildSchedule(data: AppData): LocalNotificationSchema[] {
@@ -168,7 +175,8 @@ function buildSchedule(data: AppData): LocalNotificationSchema[] {
   const character = data.settings.advisorCharacter ?? 'default'
   const now = new Date()
   const today = localDateStr(now)
-  const streak = computeStreak(data, today).current
+  const atRisk = atRiskCategories(data, today)
+  const atRiskLabel = atRisk.map(c => STREAK_CATEGORY_META[c].label).join('・')
   const notifications: LocalNotificationSchema[] = []
 
   for (let day = 0; day < DAYS_AHEAD; day++) {
@@ -182,7 +190,7 @@ function buildSchedule(data: AppData): LocalNotificationSchema[] {
       if (day === 0 && isRecorded(data, kind, today)) return
 
       const title = kind === 'streak'
-        ? (day === 0 && streak > 0 ? `🔥 ${streak}日連続が途切れそう！` : '🔥 今日の記録がまだです')
+        ? (day === 0 && atRisk.length > 0 ? `🔥 ${atRiskLabel}の連続が途切れそう！` : '🔥 今日の記録がまだです')
         : TITLES[kind]
       notifications.push({
         id: ID_BASE + day * 10 + i,

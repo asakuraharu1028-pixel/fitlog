@@ -66,6 +66,45 @@
                 android:resource="@xml/widget_exercise_info" />
         </receiver>
 
+        <!-- 食事の連続記録ウィジェット -->
+        <receiver
+            android:name=".MealStreakWidget"
+            android:exported="true"
+            android:label="Fitlog 食事ウィジェット">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_meal_streak_info" />
+        </receiver>
+
+        <!-- 体重・睡眠の連続記録ウィジェット -->
+        <receiver
+            android:name=".BodyStreakWidget"
+            android:exported="true"
+            android:label="Fitlog 体重・睡眠ウィジェット">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_body_streak_info" />
+        </receiver>
+
+        <!-- 習慣（セルフケア）の連続記録ウィジェット -->
+        <receiver
+            android:name=".HabitStreakWidget"
+            android:exported="true"
+            android:label="Fitlog 習慣（セルフケア）ウィジェット">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_habit_streak_info" />
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

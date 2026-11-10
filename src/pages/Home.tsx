@@ -5,7 +5,7 @@ import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
 import { hasAiKey } from '../lib/ai'
 import type { AdviceLog } from '../types'
 import { computeTrophies, TIER_COLORS } from '../lib/trophies'
-import { computeStreak, type DayStatus } from '../lib/streak'
+import { computeAllStreaks, STREAK_CATEGORIES, STREAK_CATEGORY_META, type DayStatus, type StreakCategory, type StreakInfo } from '../lib/streak'
 import QuickExerciseCard from '../components/QuickExerciseCard'
 import SelfCareCard from '../components/SelfCareCard'
 import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy } from 'lucide-react'
@@ -456,51 +456,68 @@ const DAY_STATUS_STYLE: Record<DayStatus, string> = {
 }
 
 function StreakCard({ data, today }: { data: AppData; today: string }) {
-  const streak = computeStreak(data, today)
-  const weekday = (date: string) =>
-    new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', { weekday: 'short' })
+  const streaks = computeAllStreaks(data, today)
+  const remaining = STREAK_CATEGORIES.filter(c => !streaks[c].todayRecorded)
 
   let message: string
-  if (streak.todayRecorded) {
-    message = '今日も記録済み！この調子で続けよう'
-  } else if (streak.current > 0) {
-    message = `今日なにか1件記録すると ${streak.current + 1}日 に伸びます`
+  if (remaining.length === 0) {
+    message = '今日は全部記録済み！この調子で続けよう'
   } else {
-    message = '何か1件記録すれば、今日から連続記録スタート'
+    const atRisk = remaining.filter(c => streaks[c].current > 0)
+    message = atRisk.length > 0
+      ? `まだ：${atRisk.map(c => STREAK_CATEGORY_META[c].label).join('・')}（記録すると連続が伸びます）`
+      : `まだ：${remaining.map(c => STREAK_CATEGORY_META[c].label).join('・')}`
   }
 
   return (
     <div className="bg-white rounded-2xl p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div className="flex items-end gap-1">
-          <span className="text-3xl">🔥</span>
-          <span className="text-3xl font-bold text-orange-500">{streak.current}</span>
-          <span className="text-sm text-gray-500 mb-1">日連続記録</span>
-        </div>
-        <div className="text-right text-xs text-gray-400 space-y-0.5">
-          <p>最長 {streak.best}日</p>
-          <p title="記録できなかった日を週1回まで自動でカバーします">
-            🧊 フリーズ 残り{streak.freezesLeftThisWeek}回/週
-          </p>
-        </div>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="font-semibold text-gray-700">🔥 連続記録</h2>
+        <p className="text-[10px] text-gray-400" title="記録できなかった日を、カテゴリごとに週1回まで自動でカバーします">
+          🧊 フリーズは各カテゴリ週1回
+        </p>
       </div>
 
-      <div className="flex justify-between mt-3">
+      <div className="divide-y divide-gray-100">
+        {STREAK_CATEGORIES.map(c => (
+          <StreakRow key={c} category={c} streak={streaks[c]} today={today} />
+        ))}
+      </div>
+
+      <p className={`text-xs mt-2 ${remaining.length === 0 ? 'text-green-600' : 'text-orange-500 font-semibold'}`}>
+        {message}
+      </p>
+    </div>
+  )
+}
+
+function StreakRow({ category, streak, today }: { category: StreakCategory; streak: StreakInfo; today: string }) {
+  const meta = STREAK_CATEGORY_META[category]
+  const weekday = (date: string) =>
+    new Date(date + 'T00:00:00').toLocaleDateString('ja-JP', { weekday: 'narrow' })
+
+  return (
+    <div className="flex items-center gap-2 py-2" title={meta.hint}>
+      <div className="w-20 shrink-0">
+        <p className="text-xs text-gray-600">{meta.icon} {meta.label}</p>
+        <p className="text-[10px] text-gray-400">最長{streak.best}・🧊{streak.freezesLeftThisWeek}</p>
+      </div>
+      <div className="w-12 shrink-0 text-right">
+        <span className="text-xl font-bold text-orange-500">{streak.current}</span>
+        <span className="text-[10px] text-gray-500">日</span>
+      </div>
+      <div className="flex-1 flex justify-between pl-1">
         {streak.recent.map(({ date, status }) => (
-          <div key={date} className="flex flex-col items-center gap-1">
-            <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${DAY_STATUS_STYLE[status]}`}>
+          <div key={date} className="flex flex-col items-center gap-0.5">
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] ${DAY_STATUS_STYLE[status]}`}>
               {status === 'recorded' ? '✓' : status === 'frozen' ? '🧊' : ''}
             </span>
-            <span className={`text-[10px] ${date === today ? 'text-orange-500 font-bold' : 'text-gray-400'}`}>
+            <span className={`text-[9px] ${date === today ? 'text-orange-500 font-bold' : 'text-gray-400'}`}>
               {date === today ? '今日' : weekday(date)}
             </span>
           </div>
         ))}
       </div>
-
-      <p className={`text-xs mt-3 ${streak.todayRecorded ? 'text-green-600' : 'text-orange-500 font-semibold'}`}>
-        {message}
-      </p>
     </div>
   )
 }

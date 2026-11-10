@@ -7,4 +7,7 @@
     <string name="server_client_id">685129420203-9k3edai0b7kh28or4ummjpnourgh2g8u.apps.googleusercontent.com</string>
     <string name="widget_description">今日のカロリー・体重をホーム画面に表示</string>
     <string name="exercise_widget_description">運動の連続記録と直近7日をホーム画面に表示</string>
+    <string name="meal_streak_widget_description">食事の連続記録と直近7日をホーム画面に表示</string>
+    <string name="body_streak_widget_description">体重・睡眠の連続記録と直近7日をホーム画面に表示</string>
+    <string name="habit_streak_widget_description">習慣（セルフケア）の連続記録と直近7日をホーム画面に表示</string>
 </resources>

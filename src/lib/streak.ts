@@ -18,22 +18,47 @@ export interface StreakInfo {
   recent: { date: string; status: DayStatus }[]
 }
 
-/** 「記録した日」とみなす日付（食事・体重・運動。自動同期の歩数・睡眠は含めない） */
+/** 継続を判定するカテゴリ */
+export type StreakCategory = 'exercise' | 'meal' | 'body' | 'habit'
+
+export const STREAK_CATEGORIES: StreakCategory[] = ['exercise', 'meal', 'body', 'habit']
+
+export const STREAK_CATEGORY_META: Record<StreakCategory, { icon: string; label: string; hint: string }> = {
+  exercise: { icon: '💪', label: '運動',      hint: '有酸素か筋トレを1つ記録' },
+  meal:     { icon: '🍽️', label: '食事',      hint: '1食だけでも記録（「食べなかった」もOK）' },
+  body:     { icon: '⚖️', label: '体重・睡眠', hint: '体重を量るか、Health Connect の睡眠が同期されればOK' },
+  habit:    { icon: '✨', label: '習慣',      hint: 'セルフケアを1つ記録（最低ラインでもOK）' },
+}
+
+/** カテゴリごとの「記録した日」 */
+export function categoryDates(data: AppData, category: StreakCategory): Set<string> {
+  switch (category) {
+    case 'exercise':
+      return new Set([
+        ...data.cardioLogs.map(c => c.date),
+        ...data.strengthLogs.map(s => s.date),
+      ])
+    case 'meal':
+      return new Set(data.mealLogs.map(m => m.date))
+    case 'body':
+      // 睡眠は Health Connect から自動同期されるもの（日付は就寝日）
+      return new Set([
+        ...data.bodyRecords.map(r => r.date),
+        ...(data.sleepLogs ?? []).map(s => s.date),
+      ])
+    case 'habit':
+      return new Set((data.careLogs ?? []).map(l => l.date))
+  }
+}
+
+/** 何かしら記録した日（全カテゴリの合計） */
 export function recordedDates(data: AppData): Set<string> {
-  return new Set([
-    ...data.mealLogs.map(m => m.date),
-    ...data.bodyRecords.map(r => r.date),
-    ...data.cardioLogs.map(c => c.date),
-    ...data.strengthLogs.map(s => s.date),
-  ])
+  return new Set(STREAK_CATEGORIES.flatMap(c => [...categoryDates(data, c)]))
 }
 
 /** 運動（有酸素・筋トレ）を記録した日付 */
 export function exerciseDates(data: AppData): Set<string> {
-  return new Set([
-    ...data.cardioLogs.map(c => c.date),
-    ...data.strengthLogs.map(s => s.date),
-  ])
+  return categoryDates(data, 'exercise')
 }
 
 function addDays(date: string, n: number): string {
@@ -50,17 +75,28 @@ function weekKey(date: string): string {
 }
 
 /**
- * 連続記録を計算する。
- * 記録のない日は、連続中かつその週のフリーズが残っていれば自動でフリーズを使って連続を維持する。
+ * カテゴリごとの連続記録を計算する。
+ * 記録のない日は、連続中かつその週のフリーズが残っていれば自動でフリーズを使って連続を維持する（フリーズはカテゴリごとに別）。
  * 今日はまだ1日が終わっていないので、未記録でも途切れ扱いにしない。
  */
-export function computeStreak(data: AppData, today: string = localDateStr()): StreakInfo {
-  return computeStreakFromDates(recordedDates(data), today)
+export function computeCategoryStreak(
+  data: AppData, category: StreakCategory, today: string = localDateStr(),
+): StreakInfo {
+  return computeStreakFromDates(categoryDates(data, category), today)
 }
 
-/** 運動だけの連続記録（食事・体重の記録では伸びない） */
+/** 全カテゴリの連続記録 */
+export function computeAllStreaks(
+  data: AppData, today: string = localDateStr(),
+): Record<StreakCategory, StreakInfo> {
+  return Object.fromEntries(
+    STREAK_CATEGORIES.map(c => [c, computeCategoryStreak(data, c, today)]),
+  ) as Record<StreakCategory, StreakInfo>
+}
+
+/** 運動だけの連続記録 */
 export function computeExerciseStreak(data: AppData, today: string = localDateStr()): StreakInfo {
-  return computeStreakFromDates(exerciseDates(data), today)
+  return computeCategoryStreak(data, 'exercise', today)
 }
 
 function computeStreakFromDates(dates: Set<string>, today: string): StreakInfo {

@@ -29,11 +29,15 @@ class WidgetPlugin : Plugin() {
         if (call.hasOption("todayBurned"))  editor.putInt("todayBurned",  call.getInt("todayBurned", -1)!!)
         if (call.hasOption("latestWeight")) editor.putString("latestWeight", call.getString("latestWeight"))
         if (call.hasOption("lastUpdated"))  editor.putString("lastUpdated",  call.getString("lastUpdated"))
-        if (call.hasOption("exerciseDone"))   editor.putBoolean("exerciseDone", call.getBoolean("exerciseDone", false)!!)
-        if (call.hasOption("exerciseStreak")) editor.putInt("exerciseStreak", call.getInt("exerciseStreak", 0)!!)
-        if (call.hasOption("exerciseBest"))   editor.putInt("exerciseBest", call.getInt("exerciseBest", 0)!!)
-        if (call.hasOption("exerciseFreezesLeft")) editor.putInt("exerciseFreezesLeft", call.getInt("exerciseFreezesLeft", 0)!!)
-        if (call.hasOption("exerciseRecent")) editor.putString("exerciseRecent", call.getString("exerciseRecent"))
+        // 連続記録（カテゴリごとに "<key>Done" "<key>Streak" "<key>Best" "<key>FreezesLeft" "<key>Recent"）
+        for (category in StreakCategory.values()) {
+            val k = category.key
+            if (call.hasOption("${k}Done"))        editor.putBoolean("${k}Done", call.getBoolean("${k}Done", false)!!)
+            if (call.hasOption("${k}Streak"))      editor.putInt("${k}Streak", call.getInt("${k}Streak", 0)!!)
+            if (call.hasOption("${k}Best"))        editor.putInt("${k}Best", call.getInt("${k}Best", 0)!!)
+            if (call.hasOption("${k}FreezesLeft")) editor.putInt("${k}FreezesLeft", call.getInt("${k}FreezesLeft", 0)!!)
+            if (call.hasOption("${k}Recent"))      editor.putString("${k}Recent", call.getString("${k}Recent"))
+        }
         editor.apply()
 
         // 全ウィジェットを強制更新
@@ -42,12 +46,9 @@ class WidgetPlugin : Plugin() {
         for (id in ids) {
             FitlogWidget.updateWidget(context, manager, id)
         }
-        val exerciseIds = manager.getAppWidgetIds(ComponentName(context, ExerciseWidget::class.java))
-        for (id in exerciseIds) {
-            ExerciseWidget.updateWidget(context, manager, id)
-        }
+        val streakCount = StreakWidget.updateAll(context, manager)
 
-        call.resolve(JSObject().put("updated", ids.size + exerciseIds.size))
+        call.resolve(JSObject().put("updated", ids.size + streakCount))
     }
 
     /** ウィジェットからアプリを起動したときの画面を返し、二重に処理しないよう消す */

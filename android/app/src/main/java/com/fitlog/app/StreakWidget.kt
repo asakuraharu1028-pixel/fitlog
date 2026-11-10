@@ -3,6 +3,7 @@ package com.fitlog.app
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -10,8 +11,25 @@ import android.widget.RemoteViews
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-/** 運動の連続記録を表示するウィジェット（データは FitlogWidget と同じ SharedPreferences） */
-class ExerciseWidget : AppWidgetProvider() {
+/**
+ * カテゴリ別の連続記録ウィジェット（src/lib/streak.ts の StreakCategory と対応）。
+ * データは FitlogWidget と同じ SharedPreferences に "<key>Streak" などの名前で入っている。
+ */
+enum class StreakCategory(
+    val key: String,
+    val title: String,
+    val route: String,
+    val requestCode: Int,
+    val provider: Class<out AppWidgetProvider>,
+) {
+    EXERCISE("exercise", "💪 運動", "/exercise", 10, ExerciseWidget::class.java),
+    MEAL("meal", "🍽️ 食事", "/meal", 11, MealStreakWidget::class.java),
+    BODY("body", "⚖️ 体重・睡眠", "/body", 12, BodyStreakWidget::class.java),
+    HABIT("habit", "✨ 習慣", "/", 13, HabitStreakWidget::class.java),
+}
+
+/** 各カテゴリのウィジェットの共通処理 */
+abstract class StreakWidget(private val category: StreakCategory) : AppWidgetProvider() {
 
     override fun onUpdate(
         context: Context,
@@ -19,7 +37,7 @@ class ExerciseWidget : AppWidgetProvider() {
         appWidgetIds: IntArray
     ) {
         for (appWidgetId in appWidgetIds) {
-            updateWidget(context, appWidgetManager, appWidgetId)
+            render(context, appWidgetManager, appWidgetId, category)
         }
     }
 
@@ -35,24 +53,37 @@ class ExerciseWidget : AppWidgetProvider() {
             R.id.ex_day4, R.id.ex_day5, R.id.ex_day6,
         )
 
-        fun updateWidget(
+        /** 全カテゴリの配置済みウィジェットを更新し、更新した数を返す */
+        fun updateAll(context: Context, manager: AppWidgetManager): Int {
+            var count = 0
+            for (category in StreakCategory.values()) {
+                val ids = manager.getAppWidgetIds(ComponentName(context, category.provider))
+                for (id in ids) render(context, manager, id, category)
+                count += ids.size
+            }
+            return count
+        }
+
+        fun render(
             context: Context,
             appWidgetManager: AppWidgetManager,
-            appWidgetId: Int
+            appWidgetId: Int,
+            category: StreakCategory,
         ) {
+            val k = category.key
             val prefs = context.getSharedPreferences("FitlogWidget", Context.MODE_PRIVATE)
             val lastUpdated = prefs.getString("lastUpdated", null)
                 ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-            val savedStreak  = prefs.getInt("exerciseStreak", -1)
-            val best         = prefs.getInt("exerciseBest", -1)
-            val savedFreezes = prefs.getInt("exerciseFreezesLeft", -1)
+            val savedStreak  = prefs.getInt("${k}Streak", -1)
+            val best         = prefs.getInt("${k}Best", -1)
+            val savedFreezes = prefs.getInt("${k}FreezesLeft", -1)
             // 最後に同期した日を末尾とする直近7日の状態（R=記録 F=フリーズ M=記録なし P=未定）
-            val recent  = prefs.getString("exerciseRecent", "") ?: ""
+            val recent  = prefs.getString("${k}Recent", "") ?: ""
 
             val today = LocalDate.now()
             // 最後の同期から何日経ったか（アプリを開いていない日の分だけ表示をずらす）
             val daysSince = lastUpdated?.let { ChronoUnit.DAYS.between(it, today).toInt() } ?: 0
-            val doneOnLastSync = prefs.getBoolean("exerciseDone", false)
+            val doneOnLastSync = prefs.getBoolean("${k}Done", false)
             val doneToday = daysSince == 0 && doneOnLastSync
 
             // 同期していない日は記録なしとして、streak.ts と同じ規則でフリーズ・途切れを当てはめる
@@ -61,7 +92,7 @@ class ExerciseWidget : AppWidgetProvider() {
             val gapStatus = HashMap<LocalDate, Char>()
             if (lastUpdated != null && daysSince > 0 && streak >= 0 && freezes >= 0) {
                 var week = weekStart(lastUpdated)
-                // 同期した日に運動済みならその日は記録あり。まだなら翌日以降と同じく記録なし扱い
+                // 同期した日に記録済みならその日は記録あり。まだなら翌日以降と同じく記録なし扱い
                 var d = if (doneOnLastSync) lastUpdated.plusDays(1) else lastUpdated
                 while (d.isBefore(today)) {
                     val w = weekStart(d)
@@ -80,6 +111,7 @@ class ExerciseWidget : AppWidgetProvider() {
             }
 
             val views = RemoteViews(context.packageName, R.layout.widget_exercise)
+            views.setTextViewText(R.id.ex_title, category.title)
 
             // 背景色で今日の状態を伝える（済み=緑、連続中でまだ=オレンジ〜赤、途切れている=グレー）
             views.setInt(
@@ -131,13 +163,13 @@ class ExerciseWidget : AppWidgetProvider() {
                 ))
             }
 
-            // タップで運動画面を開く
+            // タップでそのカテゴリの画面を開く
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                putExtra(WidgetPlugin.EXTRA_ROUTE, "/exercise")
+                putExtra(WidgetPlugin.EXTRA_ROUTE, category.route)
             }
             val pending = PendingIntent.getActivity(
-                context, 10, intent,
+                context, category.requestCode, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.ex_root, pending)
@@ -146,3 +178,15 @@ class ExerciseWidget : AppWidgetProvider() {
         }
     }
 }
+
+/** 運動の連続記録（配置済みのウィジェットが消えないよう、クラス名は従来のまま） */
+class ExerciseWidget : StreakWidget(StreakCategory.EXERCISE)
+
+/** 食事の連続記録 */
+class MealStreakWidget : StreakWidget(StreakCategory.MEAL)
+
+/** 体重・睡眠（Health Connect）の連続記録 */
+class BodyStreakWidget : StreakWidget(StreakCategory.BODY)
+
+/** 習慣（セルフケア）の連続記録 */
+class HabitStreakWidget : StreakWidget(StreakCategory.HABIT)
