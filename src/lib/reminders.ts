@@ -6,6 +6,7 @@ import { computeAllStreaks, recordedDates, STREAK_CATEGORIES, STREAK_CATEGORY_ME
 import { hasExerciseOn } from './quickexercise'
 import { localDateStr } from './utils'
 import { careLogOn, resolveCareItems } from './selfcare'
+import { loadStockStatus, resolveStockReminder, stockAppUrl } from './stock'
 
 export const REMINDER_KINDS: ReminderKind[] = ['weight', 'breakfast', 'lunch', 'dinner', 'exercise', 'streak']
 
@@ -97,6 +98,34 @@ const CARE_MESSAGES: Record<AdvisorCharacterId, (minimum: string) => string> = {
   domoto:   min => `光一：${min}だけでええねん。\n剛：ちょっとやったら、気持ちええで。`,
 }
 
+// 日用品の在庫。棚卸しは「その場所だけ5分」、要購入は「注文するだけ」と、すぐ済むことを伝える
+const STOCK_MESSAGES: Record<AdvisorCharacterId, { stocktake: (place: string, n: number) => string; low: (names: string) => string }> = {
+  default: {
+    stocktake: (place, n) => `今週は「${place}」の${n}品目だけ数えましょう。5分ほどで終わります。タップで棚卸し画面が開きます。`,
+    low:       names => `${names}が残りわずかです。ホームからAmazonの注文ページを開けます。`,
+  },
+  kenmochi: {
+    stocktake: (place, n) => `今週は「${place}」の${n}品目だけですよ。5分で終わる作業を先延ばしにする理由、ありますか。`,
+    low:       names => `${names}、もうすぐ切れますよ。切れてから慌てるの、毎回やってません？`,
+  },
+  gaku: {
+    stocktake: (place, n) => `今週は「${place}」の${n}品目だけっす！5分でサクッと数えちゃいましょ✌️`,
+    low:       names => `${names}がもうすぐなくなるっす！今のうちにポチっとしときましょ🛒`,
+  },
+  togabito: {
+    stocktake: (place, n) => `剣持：今週は「${place}」の${n}品目だけですよ。
+ガク：5分で終わるっす、一緒にやりましょ！`,
+    low:       names => `剣持：${names}、切れかけてますよ。
+ガク：今のうちに注文しとけば安心っす🛒`,
+  },
+  domoto: {
+    stocktake: (place, n) => `光一：今週は「${place}」の${n}品目だけや。すぐ終わるで。
+剛：数えるだけやから、気楽にいこか。`,
+    low:       names => `光一：${names}、もうすぐ切れるで。
+剛：なくなる前に頼んどこなぁ。`,
+  },
+}
+
 export type ResolvedReminderSettings = {
   enabled: boolean
   items: Record<ReminderKind, { enabled: boolean; time: string }>
@@ -127,8 +156,78 @@ const PHASE2_ID = 30000
 const PHASE2_AFTER_DAYS = 14
 const PHASE2_TIME = '20:00'
 
+// 日用品の在庫の通知 ID（棚卸しは日ごと、要購入は1件にまとめる）
+const STOCK_LOW_ID = 30050
+const STOCKTAKE_ID_BASE = 30100
+const STOCKTAKE_ID_MAX = STOCKTAKE_ID_BASE + DAYS_AHEAD
+// 要購入の通知を出せる時間帯（この外なら次の朝に回す）
+const STOCK_LOW_FROM_HOUR = 7
+const STOCK_LOW_TO_HOUR = 22
+// 要購入になった品目ごとの通知時刻（ms）。同じ品目は、補充されて要購入でなくなるまで二度通知しない
+const STOCK_LOW_NOTIFIED_KEY = 'fitlog-stock-low-notified'
+
 const isOurId = (id: number) =>
-  (id >= ID_BASE && id < ID_MAX) || (id >= CARE_ID_BASE && id < CARE_ID_MAX) || id === PHASE2_ID
+  (id >= ID_BASE && id < ID_MAX) || (id >= CARE_ID_BASE && id < CARE_ID_MAX) || id === PHASE2_ID ||
+  id === STOCK_LOW_ID || (id >= STOCKTAKE_ID_BASE && id < STOCKTAKE_ID_MAX)
+
+/** 要購入の通知を出す時刻：今から1分後。夜間なら次の朝 */
+function nextStockLowTime(now: Date): number {
+  const at = new Date(now.getTime() + 60 * 1000)
+  if (at.getHours() >= STOCK_LOW_TO_HOUR) at.setDate(at.getDate() + 1)
+  if (at.getHours() >= STOCK_LOW_TO_HOUR || at.getHours() < STOCK_LOW_FROM_HOUR) at.setHours(STOCK_LOW_FROM_HOUR, 0, 0, 0)
+  return at.getTime()
+}
+
+function readLowNotified(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(STOCK_LOW_NOTIFIED_KEY) || '{}') } catch { return {} }
+}
+
+/** 日用品の在庫：毎週の棚卸し（確認が古い保管場所があるときだけ）と、新しく要購入になった品目 */
+function stockNotifications(data: AppData, now: Date, character: AdvisorCharacterId): LocalNotificationSchema[] {
+  const settings = resolveStockReminder(data.settings.stock)
+  const status = loadStockStatus()
+  if (!settings.enabled || !status) return []
+  const notifications: LocalNotificationSchema[] = []
+
+  const st = status.stocktake
+  if (st) {
+    const [h, m] = settings.stocktakeTime.split(':').map(Number)
+    const body = STOCK_MESSAGES[character].stocktake(st.place, st.itemCount)
+    for (let day = 0; day < DAYS_AHEAD; day++) {
+      const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + day, h, m)
+      if (at.getDay() !== settings.stocktakeDay || at <= now) continue
+      notifications.push({
+        id: STOCKTAKE_ID_BASE + day,
+        title: `📦 今週の棚卸し：${st.place}`,
+        body,
+        largeBody: body,
+        channelId: CHANNEL_ID,
+        schedule: { at, allowWhileIdle: true },
+        extra: { url: stockAppUrl(status, st.placeId) },
+      })
+    }
+  }
+
+  // 予約し直しても通知時刻が変わらないよう、品目ごとに最初に決めた時刻を覚えておく
+  const notified = readLowNotified()
+  const next: Record<string, number> = {}
+  status.low.forEach(item => { next[item.name] = notified[item.name] ?? nextStockLowTime(now) })
+  try { localStorage.setItem(STOCK_LOW_NOTIFIED_KEY, JSON.stringify(next)) } catch { /* 次回また通知されるだけ */ }
+  const pending = Object.keys(next).filter(name => next[name] > now.getTime())
+  if (pending.length > 0) {
+    const body = STOCK_MESSAGES[character].low(pending.join('、'))
+    notifications.push({
+      id: STOCK_LOW_ID,
+      title: `🛒 要購入：${pending[0]}${pending.length > 1 ? `ほか${pending.length - 1}品` : ''}`,
+      body,
+      largeBody: body,
+      channelId: CHANNEL_ID,
+      schedule: { at: new Date(Math.min(...pending.map(name => next[name]))), allowWhileIdle: true },
+      extra: { route: '/' },
+    })
+  }
+  return notifications
+}
 
 /** 最初のセルフケア記録から PHASE2_AFTER_DAYS 日後の通知。すでに過ぎていれば null */
 function phase2Notification(data: AppData, now: Date): LocalNotificationSchema | null {
@@ -227,6 +326,7 @@ function buildSchedule(data: AppData): LocalNotificationSchema[] {
 
   const phase2 = phase2Notification(data, now)
   if (phase2) notifications.push(phase2)
+  notifications.push(...stockNotifications(data, now, character))
   return notifications
 }
 
@@ -289,7 +389,9 @@ export function initReminderListeners() {
   if (!isNative || listenerAdded) return
   listenerAdded = true
   LocalNotifications.addListener('localNotificationActionPerformed', (event) => {
-    const route = event.notification.extra?.route
-    if (typeof route === 'string') window.location.hash = '#' + route
+    const { route, url } = event.notification.extra ?? {}
+    // 在庫アプリなど外のページはブラウザで開く
+    if (typeof url === 'string') window.open(url, '_blank')
+    else if (typeof route === 'string') window.location.hash = '#' + route
   })
 }

@@ -29,7 +29,7 @@ export function isRecipeProxyConfigured(): boolean {
   return !!PROXY_URL
 }
 
-async function callProxy<T>(body: Record<string, unknown>, retry = true): Promise<ProxyResponse<T>> {
+export async function callProxy<T>(body: Record<string, unknown>, retry = true): Promise<ProxyResponse<T>> {
   if (!PROXY_URL) throw new Error('VITE_RECIPE_PROXY_URL is not set')
   const token = getAccessToken()
   if (!token) throw new Error('Not authenticated')

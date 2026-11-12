@@ -216,6 +216,15 @@ export interface ReminderSettings {
   items: Partial<Record<ReminderKind, { enabled: boolean; time: string }>>
 }
 
+/** 日用品の在庫（家計簿GAS）の通知 */
+export interface StockReminderSettings {
+  enabled: boolean
+  /** 棚卸しの通知を出す曜日（0=日〜6=土） */
+  stocktakeDay: number
+  /** 棚卸しの通知時刻（HH:MM） */
+  stocktakeTime: string
+}
+
 /** セルフケア項目の状態（育成中=ホームで大きく表示 / 定着済み=小さく表示 / お休み=非表示） */
 export type CareStatus = 'growing' | 'established' | 'paused'
 
@@ -297,6 +306,8 @@ export interface AppData {
     advisorCharacter?: 'default' | 'kenmochi' | 'gaku' | 'togabito' | 'domoto'
     /** 記録リマインド通知 */
     reminders?: ReminderSettings
+    /** 日用品の在庫の通知（棚卸し・要購入） */
+    stock?: StockReminderSettings
     /** セルフケア項目（未設定なら既定の項目を使う） */
     careItems?: CareItem[]
     /** ご褒美（4項目の累計記録日数の平均で判定） */

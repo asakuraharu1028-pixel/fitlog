@@ -10,6 +10,7 @@ import { computeAllStreaks, STREAK_CATEGORIES, STREAK_CATEGORY_META, type DaySta
 import QuickExerciseCard from '../components/QuickExerciseCard'
 import SelfCareCard from '../components/SelfCareCard'
 import RewardCard from '../components/RewardCard'
+import StockCard from '../components/StockCard'
 import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy, Scale, Plus, ChevronDown } from 'lucide-react'
 import type { AppData, MealLog } from '../types'
 
@@ -96,6 +97,9 @@ export default function Home() {
         exerciseKcal={exerciseKcal}
         exerciseCount={todayCardio.length + todayStrength.length}
       />
+
+      {/* 日用品（要購入・今週の棚卸し）：あるときだけ出る */}
+      <StockCard />
 
       <SectionTitle>習慣</SectionTitle>
       {/* 連続記録 */}

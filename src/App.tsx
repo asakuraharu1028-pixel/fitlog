@@ -16,7 +16,8 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: string |
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { useAppStore } from './lib/store'
 import { isNative, initAuth, signIn, signInSilent } from './lib/auth'
-import { initReminderListeners } from './lib/reminders'
+import { initReminderListeners, syncReminders } from './lib/reminders'
+import { useStockStore } from './lib/stock'
 import { initWidgetListeners } from './lib/widget'
 import LoginScreen from './components/LoginScreen'
 import Layout from './components/Layout'
@@ -78,6 +79,21 @@ export default function App() {
     document.body.appendChild(script)
     return () => { document.body.removeChild(script) }
   }, [])
+
+  // 日用品の在庫をログイン後と、アプリが前面に戻ったときに読み直す（30分以内なら前回の結果を使う）。
+  // 新しく読めたら、棚卸し・要購入の通知を予約し直す
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const refreshStock = () => {
+      useStockStore.getState().refresh().then(status => {
+        if (status) syncReminders(useAppStore.getState().data)
+      })
+    }
+    refreshStock()
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshStock() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [isAuthenticated])
 
   // OAuthコールバックはログイン状態に関係なく表示
   return (

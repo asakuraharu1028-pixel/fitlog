@@ -10,6 +10,8 @@
  *   NOTION_TOKEN   Notion インテグレーションのシークレット
  *   RECIPE_DB_ID   DB_レシピリスト のデータベースID
  *   ALLOWED_EMAIL  呼び出しを許可する Google アカウントのメールアドレス
+ *   STOCK_SHEET_ID 家計簿スプレッドシートのID（在庫の状況を返すときだけ使う）
+ *   STOCK_APP_URL  家計簿GASの在庫アプリの /exec URL（通知から開く先）
  *
  * 呼び出し（POST, Content-Type: text/plain でプリフライトを避ける）:
  *   { "action": "listRecipes", "token": "<Google アクセストークン>", "refresh": false }
@@ -17,6 +19,7 @@
  *   { "action": "updateRecipe", "token": "...", "id": "<ページID>", "recipe": <Recipe> } → data: <Recipe>
  *   { "action": "deleteRecipe", "token": "...", "id": "<ページID>" }           → data: { id }
  *   { "action": "importRecipes", "token": "...", "recipes": [<Recipe>...] }
+ *   { "action": "stockStatus", "token": "..." }  → data: 要購入の品目と、棚卸しを勧める保管場所
  * 応答:
  *   { "ok": true, "data": { "version": 1, "recipes": [...], "fetchedAt": "..." } }
  *   { "ok": false, "error": "unauthorized" }
@@ -100,6 +103,8 @@ function doPost(e) {
         return json_({ ok: true, data: updateRecipe_(req.id, req.recipe) })
       case 'deleteRecipe':
         return json_({ ok: true, data: deleteRecipe_(req.id) })
+      case 'stockStatus':
+        return json_({ ok: true, data: stockStatus_() })
       default:
         return json_({ ok: false, error: 'unknown action' })
     }
@@ -511,6 +516,73 @@ function isEmptyProp_(prop) {
 
 function normalizeName_(name) {
   return String(name || '').normalize('NFKC').replace(/\s+/g, '')
+}
+
+// ---- 日用品の在庫（家計簿スプレッドシートの「在庫」「保管場所」シートを読むだけ） ----
+
+// 列は家計簿GAS（stock.js）の SC と同じ並び
+const STOCK_COL = { NAME: 0, PLACE: 2, COUNT: 3, MIN: 4, URL: 7, CHECKED: 8 }
+// 最後の確認からこの日数がたった保管場所を棚卸しの候補にする
+const STOCKTAKE_STALE_DAYS = 30
+
+// 要購入：数が入っていて発注点以下の品目。
+// 棚卸し：確認が一番古い品目のある保管場所を1つ（未確認の品目があればその場所を優先、同じなら保管場所シートの順）
+function stockStatus_() {
+  const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+  const stockSheet = ss.getSheetByName('在庫')
+  const placeSheet = ss.getSheetByName('保管場所')
+  if (!stockSheet || !placeSheet) throw new Error('stock sheets not found')
+
+  const n = stockSheet.getLastRow() - 1
+  const items = (n > 0 ? stockSheet.getRange(2, 1, n, STOCK_COL.CHECKED + 1).getValues() : [])
+    .map(r => ({
+      name: String(r[STOCK_COL.NAME]).trim(),
+      place: String(r[STOCK_COL.PLACE]).trim(),
+      count: r[STOCK_COL.COUNT] === '' || r[STOCK_COL.COUNT] === null ? null : Number(r[STOCK_COL.COUNT]),
+      min: Number(r[STOCK_COL.MIN]) || 0,
+      url: String(r[STOCK_COL.URL]).trim(),
+      checked: r[STOCK_COL.CHECKED] instanceof Date ? r[STOCK_COL.CHECKED] : null,
+    }))
+    .filter(i => i.name)
+
+  const low = items
+    .filter(i => i.count !== null && i.count <= i.min)
+    .map(i => ({ name: i.name, count: i.count, min: i.min, place: i.place, url: i.url }))
+
+  const pn = placeSheet.getLastRow() - 1
+  const places = (pn > 0 ? placeSheet.getRange(2, 1, pn, 2).getValues() : [])
+    .map(r => ({ name: String(r[0]).trim(), id: String(r[1]).trim() }))
+    .filter(p => p.name && p.id)
+
+  const staleBefore = Date.now() - STOCKTAKE_STALE_DAYS * 86400000
+  let stocktake = null
+  let oldest = Infinity
+  places.forEach(p => {
+    const inPlace = items.filter(i => i.place === p.name)
+    if (!inPlace.length) return
+    // 未確認の品目は -Infinity 扱い（一番古い）
+    const t = Math.min.apply(null, inPlace.map(i => i.checked ? i.checked.getTime() : -Infinity))
+    if (t >= staleBefore || t >= oldest) return
+    oldest = t
+    stocktake = {
+      place: p.name,
+      placeId: p.id,
+      itemCount: inPlace.length,
+      lastChecked: isFinite(t) ? Utilities.formatDate(new Date(t), 'Asia/Tokyo', 'yyyy-MM-dd') : null,
+    }
+  })
+
+  return {
+    appUrl: prop_('STOCK_APP_URL'),
+    low: low,
+    stocktake: stocktake,
+    fetchedAt: new Date().toISOString(),
+  }
+}
+
+// エディタから実行して設定を確かめる用（認証は通さない）。初回はスプレッドシートを読む許可を求められる
+function debugStockStatus() {
+  Logger.log(JSON.stringify(stockStatus_(), null, 2))
 }
 
 // ---- 共通 ----

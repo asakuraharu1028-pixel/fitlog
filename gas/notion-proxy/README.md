@@ -65,6 +65,23 @@ Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`s
 
 `servings` と栄養値は `null` になることがあります。アプリ側で「栄養未登録」として扱ってください。
 
+## 日用品の在庫（stockStatus）
+
+家計簿スプレッドシートの「在庫」「保管場所」シート（家計簿GASの在庫管理）を読み、要購入の品目と棚卸しを勧める保管場所を返します。書き込みはしません。
+
+```json
+{ "action": "stockStatus", "token": "..." }
+{ "ok": true, "data": {
+  "appUrl": "https://script.google.com/macros/s/.../exec",
+  "low": [ { "name": "シャンプー", "count": 0, "min": 0, "place": "洗面所・収納", "url": "" } ],
+  "stocktake": { "place": "玄関", "placeId": "P04", "itemCount": 2, "lastChecked": "2026-10-10" },
+  "fetchedAt": "..." } }
+```
+
+- `low`：在庫の数が入っていて、発注点以下の品目。
+- `stocktake`：最後の確認から30日以上たった品目のある保管場所のうち、確認が一番古いもの（未確認の品目がある場所が先、同じなら保管場所シートの順）。候補がなければ `null`。アプリは `appUrl?place=<placeId>` を開いて、その場所だけ棚卸しする。
+- スクリプトプロパティ `STOCK_SHEET_ID`（家計簿スプレッドシートのID）と `STOCK_APP_URL`（在庫アプリの /exec URL）が必要です。設定後、エディタで `debugStockStatus` を実行するとスプレッドシートを読む許可を求められます。
+
 ## セットアップ
 
 1. **Notion のインテグレーションを作る**
@@ -82,6 +99,8 @@ Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`s
    | `NOTION_TOKEN` | 手順1のシークレット |
    | `RECIPE_DB_ID` | `bf5bbbea39368289b4048128b30dd433` |
    | `ALLOWED_EMAIL` | fitlog にログインしている Google アカウント |
+   | `STOCK_SHEET_ID` | 家計簿スプレッドシートのID（日用品の在庫を使うときだけ） |
+   | `STOCK_APP_URL` | 家計簿GASの在庫アプリの /exec URL（同上） |
 
 4. **動作確認**：エディタで `debugListRecipes` を実行します。初回は権限の承認が出ます。ログに `recipes: 68` と1件目の内容が出れば OK です。
 5. **デプロイ**：「デプロイ」→「新しいデプロイ」→ 種類「ウェブアプリ」、次のユーザーとして実行「自分」、アクセスできるユーザー「全員」。

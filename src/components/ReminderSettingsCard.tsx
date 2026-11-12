@@ -6,7 +6,10 @@ import {
   REMINDER_KINDS, REMINDER_LABELS, resolveReminderSettings, requestReminderPermission, ensureReminderChannel,
   type ResolvedReminderSettings,
 } from '../lib/reminders'
-import type { ReminderKind } from '../types'
+import { isStockConfigured, resolveStockReminder } from '../lib/stock'
+import type { ReminderKind, StockReminderSettings } from '../types'
+
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
 
 export default function ReminderSettingsCard() {
   const { data, saveData } = useAppStore()
@@ -27,6 +30,10 @@ export default function ReminderSettingsCard() {
     }
     await save({ ...settings, enabled: !settings.enabled })
   }
+
+  const stock = resolveStockReminder(data.settings.stock)
+  const updateStock = (patch: Partial<StockReminderSettings>) =>
+    saveData({ settings: { ...data.settings, stock: { ...stock, ...patch } } })
 
   const updateItem = (kind: ReminderKind, patch: Partial<{ enabled: boolean; time: string }>) =>
     save({ ...settings, items: { ...settings.items, [kind]: { ...settings.items[kind], ...patch } } })
@@ -98,6 +105,42 @@ export default function ReminderSettingsCard() {
             <p className="text-xs text-gray-400">
               🔥 連続記録ピンチ：連続中のカテゴリ（運動・食事・体重睡眠・習慣）に今日の記録がないときに通知します
             </p>
+
+            {isStockConfigured() && (
+              <div className="pt-2 mt-2 border-t border-gray-100 space-y-2">
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 flex-1 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={stock.enabled}
+                      onChange={e => updateStock({ enabled: e.target.checked })}
+                      className="w-4 h-4 accent-green-500"
+                    />
+                    📦 日用品の棚卸し
+                  </label>
+                  <select
+                    value={stock.stocktakeDay}
+                    disabled={!stock.enabled}
+                    onChange={e => updateStock({ stocktakeDay: Number(e.target.value) })}
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-sm disabled:text-gray-300"
+                    aria-label="棚卸しの曜日"
+                  >
+                    {WEEKDAYS.map((w, i) => <option key={w} value={i}>{w}曜</option>)}
+                  </select>
+                  <input
+                    type="time"
+                    value={stock.stocktakeTime}
+                    disabled={!stock.enabled}
+                    onChange={e => e.target.value && updateStock({ stocktakeTime: e.target.value })}
+                    className="border border-gray-200 rounded-lg px-2 py-1 text-sm disabled:text-gray-300"
+                  />
+                </div>
+                <p className="text-xs text-gray-400">
+                  📦 しばらく確認していない保管場所があるときだけ、週1回その場所を知らせます（タップで棚卸し画面へ）。
+                  🛒 新しく要購入になった品目も、ONのあいだ1回だけ通知します（夜22時〜朝7時は朝に回します）
+                </p>
+              </div>
+            )}
           </div>
 
           {settings.enabled && (
