@@ -1,4 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { User, Sparkles, Gift, Bell, Cloud, ChevronLeft, ChevronRight, type LucideIcon } from 'lucide-react'
+import { hasAiKey } from '../lib/ai'
+import { resolveCareItems } from '../lib/selfcare'
 import { useAppStore } from '../lib/store'
 import { CHARACTERS } from '../lib/characters'
 import type { AdvisorCharacterId } from '../lib/characters'
@@ -118,8 +122,121 @@ function getWarnings(goals: { intake: number; burn: number; dailyDeficit: number
   return w
 }
 
+type SectionId = 'profile' | 'ai' | 'habit' | 'notify' | 'data'
+
+interface SectionDef {
+  id: SectionId
+  icon: LucideIcon
+  tone: string
+  title: string
+}
+
+const SECTIONS: SectionDef[] = [
+  { id: 'profile', icon: User,      tone: 'bg-green-50 text-green-600',   title: 'プロフィール・目標' },
+  { id: 'ai',      icon: Sparkles,  tone: 'bg-purple-50 text-purple-500', title: 'AI・アドバイザー' },
+  { id: 'habit',   icon: Gift,      tone: 'bg-amber-50 text-amber-500',   title: 'セルフケア・ご褒美' },
+  { id: 'notify',  icon: Bell,      tone: 'bg-sky-50 text-sky-500',       title: '通知' },
+  { id: 'data',    icon: Cloud,     tone: 'bg-blue-50 text-blue-500',     title: 'データ・連携' },
+]
+
+/**
+ * 設定画面。トップはカテゴリ一覧で、選ぶと ?s=<id> の画面に切り替わる
+ * （URL に持つので Android の戻るボタンで一覧に戻れる。他画面からも ?s= で直接開ける）
+ */
 export default function Settings() {
-  const { data, saveData, loadData } = useAppStore()
+  const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  const current = SECTIONS.find(x => x.id === params.get('s'))
+
+  useEffect(() => { window.scrollTo(0, 0) }, [current?.id])
+
+  if (!current) return <SettingsTop />
+
+  const back = () => {
+    // 一覧から開いたときは履歴を戻る。ほかの画面から直接来たときは一覧に置き換える
+    if ((window.history.state?.idx ?? 0) > 0) navigate(-1)
+    else setParams({}, { replace: true })
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-center gap-1 -ml-2">
+        <button onClick={back} className="flex items-center text-sm text-gray-500 px-2 py-1 rounded-lg hover:bg-gray-100" aria-label="設定に戻る">
+          <ChevronLeft size={18} /> 設定
+        </button>
+      </div>
+      <h1 className="text-lg font-bold text-gray-800 px-1 -mt-2 flex items-center gap-2">
+        <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${current.tone}`}>
+          <current.icon size={18} />
+        </span>
+        {current.title}
+      </h1>
+
+      {current.id === 'profile' && <ProfileSettings />}
+      {current.id === 'ai' && (
+        <>
+          <AdvisorSettings />
+          <AiSettingsCard />
+        </>
+      )}
+      {current.id === 'habit' && (
+        <>
+          <SelfCareSettingsCard />
+          <RewardSettingsCard />
+        </>
+      )}
+      {current.id === 'notify' && <ReminderSettingsCard />}
+      {current.id === 'data' && <DataSettings />}
+    </div>
+  )
+}
+
+/** 設定のトップ：カテゴリと今の設定内容のひとこと */
+function SettingsTop() {
+  const data = useAppStore(st => st.data)
+  const s = data.settings
+  const character = CHARACTERS.find(c => c.id === (s.advisorCharacter ?? 'default'))
+  const careCount = resolveCareItems(data).filter(i => i.status !== 'paused').length
+  const milestoneCount = s.rewards?.milestones?.length ?? 0
+
+  const summary: Record<SectionId, string> = {
+    profile: [
+      s.goalCalories ? `目標 ${s.goalCalories.toLocaleString()} kcal` : '目標カロリー未設定',
+      s.goalWeightKg ? `目標体重 ${s.goalWeightKg} kg` : null,
+    ].filter(Boolean).join('・'),
+    ai: `${character ? `${character.icon} ${character.name}` : ''}・${hasAiKey() ? 'APIキー設定済み' : 'APIキー未設定'}`,
+    habit: `セルフケア ${careCount}項目・ご褒美 ${milestoneCount ? `${milestoneCount}段階` : '未設定'}`,
+    notify: '記録リマインドなどの通知',
+    data: isNative ? 'Drive 同期・Health Connect' : 'Drive 同期・接続テスト',
+  }
+
+  return (
+    <div className="p-4 space-y-4">
+      <h1 className="text-lg font-bold text-gray-800 px-1">設定</h1>
+      <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+        {SECTIONS.map(({ id, icon: Icon, tone, title }) => (
+          <Link
+            key={id}
+            to={{ search: `?s=${id}` }}
+            className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-50 transition"
+          >
+            <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tone}`}>
+              <Icon size={20} />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-semibold text-gray-700">{title}</span>
+              <span className="block text-xs text-gray-400 truncate">{summary[id]}</span>
+            </span>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ProfileSettings() {
+  const { data, saveData } = useAppStore()
   const s = data.settings
 
   const [height, setHeight]       = useState(String(s.heightCm))
@@ -132,12 +249,6 @@ export default function Settings() {
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>(s.activityLevel ?? 'moderate')
   const [saved, setSaved]         = useState(false)
   const [saving, setSaving]       = useState(false)
-  const [diagLog, setDiagLog]     = useState<string[]>([])
-  const [diagRunning, setDiagRunning] = useState(false)
-  const [hcLog, setHcLog]         = useState<string[]>([])
-  const [hcRunning, setHcRunning] = useState(false)
-  const [reloadMsg, setReloadMsg] = useState<string | null>(null)
-  const [reloading, setReloading] = useState(false)
 
   useEffect(() => {
     setHeight(String(s.heightCm))
@@ -209,7 +320,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="space-y-4">
       <div className="bg-white rounded-2xl p-4 shadow-sm">
         <h2 className="font-semibold text-gray-700 mb-4">基本情報</h2>
         <div className="space-y-4">
@@ -429,44 +540,53 @@ export default function Settings() {
         {saving ? '保存中...' : saved ? '✓ 保存しました' : '保存'}
       </button>
 
-      {/* AIアドバイザーキャラクター */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="font-semibold text-gray-700 mb-1">AIアドバイザー</h2>
-        <p className="text-xs text-gray-400 mb-3">アドバイスの口調・キャラクターを選択できます</p>
-        <div className="space-y-2">
-          {CHARACTERS.map(c => {
-            const isSelected = (data.settings.advisorCharacter ?? 'default') === c.id
-            return (
-              <button
-                key={c.id}
-                onClick={() => saveData({ settings: { ...data.settings, advisorCharacter: c.id as AdvisorCharacterId } })}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-left transition
-                  ${isSelected ? 'border-green-400 bg-green-50' : 'border-gray-100 hover:border-gray-200'}`}
-              >
-                <span className="text-2xl w-8 text-center">{c.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${isSelected ? 'text-green-700' : 'text-gray-700'}`}>{c.name}</p>
-                  <p className="text-xs text-gray-400 truncate">{c.description}</p>
-                </div>
-                {isSelected && <span className="text-green-500 text-xs font-bold shrink-0">選択中</span>}
-              </button>
-            )
-          })}
-        </div>
+    </div>
+  )
+}
+
+/** AIアドバイザーのキャラクター選択 */
+function AdvisorSettings() {
+  const { data, saveData } = useAppStore()
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <h2 className="font-semibold text-gray-700 mb-1">AIアドバイザー</h2>
+      <p className="text-xs text-gray-400 mb-3">アドバイスの口調・キャラクターを選択できます</p>
+      <div className="space-y-2">
+        {CHARACTERS.map(c => {
+          const isSelected = (data.settings.advisorCharacter ?? 'default') === c.id
+          return (
+            <button
+              key={c.id}
+              onClick={() => saveData({ settings: { ...data.settings, advisorCharacter: c.id as AdvisorCharacterId } })}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-left transition
+                ${isSelected ? 'border-green-400 bg-green-50' : 'border-gray-100 hover:border-gray-200'}`}
+            >
+              <span className="text-2xl w-8 text-center">{c.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold ${isSelected ? 'text-green-700' : 'text-gray-700'}`}>{c.name}</p>
+                <p className="text-xs text-gray-400 truncate">{c.description}</p>
+              </div>
+              {isSelected && <span className="text-green-500 text-xs font-bold shrink-0">選択中</span>}
+            </button>
+          )
+        })}
       </div>
+    </div>
+  )
+}
 
-      {/* セルフケア項目 */}
-      <SelfCareSettingsCard />
+/** Drive 同期・診断、Health Connect 連携 */
+function DataSettings() {
+  const { loadData } = useAppStore()
+  const [diagLog, setDiagLog]     = useState<string[]>([])
+  const [diagRunning, setDiagRunning] = useState(false)
+  const [hcLog, setHcLog]         = useState<string[]>([])
+  const [hcRunning, setHcRunning] = useState(false)
+  const [reloadMsg, setReloadMsg] = useState<string | null>(null)
+  const [reloading, setReloading] = useState(false)
 
-      {/* ご褒美 */}
-      <RewardSettingsCard />
-
-      {/* 記録リマインド通知 */}
-      <ReminderSettingsCard />
-
-      {/* AI API キー・モデル設定 */}
-      <AiSettingsCard />
-
+  return (
+    <div className="space-y-4">
       {/* Drive 再読み込み */}
       <div className="bg-white rounded-2xl p-4 shadow-sm">
         <h2 className="font-semibold text-gray-700 mb-2">Drive 同期</h2>

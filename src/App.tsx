@@ -30,6 +30,7 @@ const Body         = lazy(() => import('./pages/Body'))
 const Report       = lazy(() => import('./pages/Report'))
 const Calendar     = lazy(() => import('./pages/Calendar'))
 const Settings     = lazy(() => import('./pages/Settings'))
+const Menu         = lazy(() => import('./pages/Menu'))
 const MealPlan     = lazy(() => import('./pages/MealPlan'))
 const RecipeDB     = lazy(() => import('./pages/RecipeDB'))
 const ShoppingList = lazy(() => import('./pages/ShoppingList'))
@@ -101,6 +102,7 @@ export default function App() {
                   <Route path="calendar" element={<Calendar />} />
                   <Route path="report" element={<Report />} />
                   <Route path="settings" element={<Settings />} />
+                  <Route path="menu" element={<Menu />} />
                   <Route path="mealplan" element={<MealPlan />} />
                   <Route path="recipedb" element={<RecipeDB />} />
                   <Route path="shoppinglist" element={<ShoppingList />} />

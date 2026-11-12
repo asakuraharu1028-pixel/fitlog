@@ -406,7 +406,7 @@ export default function MealPlan() {
           <p className="text-sm text-amber-700 font-medium mb-1">APIキーが必要です</p>
           <p className="text-xs text-amber-600">設定画面でGemini APIキーを登録してください</p>
           <button
-            onClick={() => navigate('/settings')}
+            onClick={() => navigate('/settings?s=ai')}
             className="mt-3 text-sm text-amber-700 underline"
           >
             設定画面へ

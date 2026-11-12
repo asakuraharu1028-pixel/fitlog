@@ -14,7 +14,7 @@ export default function RewardCard() {
 
   if (!settings) {
     return (
-      <Link to="/settings" className="block bg-white rounded-2xl p-4 shadow-sm">
+      <Link to="/settings?s=habit" className="block bg-white rounded-2xl p-4 shadow-sm">
         <div className="flex items-center gap-1.5">
           <Gift size={16} className="text-amber-500" />
           <span className="text-sm text-gray-600">ご褒美を設定すると、記録を続けた節目でもらえます</span>
@@ -36,7 +36,7 @@ export default function RewardCard() {
           <Gift size={16} className="text-amber-500" />
           <h2 className="font-semibold text-gray-700">ご褒美</h2>
         </div>
-        <Link to="/settings" className="text-xs text-gray-400 underline">節目を編集</Link>
+        <Link to="/settings?s=habit" className="text-xs text-gray-400 underline">節目を編集</Link>
       </div>
 
       {/* 到達したのにまだ受け取っていないご褒美 */}

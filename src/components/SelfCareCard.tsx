@@ -38,7 +38,7 @@ export default function SelfCareCard() {
           <Sparkles size={16} className="text-sky-500" />
           <h2 className="font-semibold text-gray-700">セルフケア</h2>
         </div>
-        <Link to="/settings" className="text-xs text-gray-400 underline">項目を編集</Link>
+        <Link to="/settings?s=habit" className="text-xs text-gray-400 underline">項目を編集</Link>
       </div>
 
       {growing.length === 0 && established.length === 0 ? (

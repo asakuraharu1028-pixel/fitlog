@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { localDateStr } from '../lib/utils'
 import { useAppStore } from '../lib/store'
 import { getDailyAdvice, getWeeklyAdvice } from '../lib/advice'
@@ -9,15 +10,15 @@ import { computeAllStreaks, STREAK_CATEGORIES, STREAK_CATEGORY_META, type DaySta
 import QuickExerciseCard from '../components/QuickExerciseCard'
 import SelfCareCard from '../components/SelfCareCard'
 import RewardCard from '../components/RewardCard'
-import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy } from 'lucide-react'
-import type { AppData } from '../types'
+import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy, Scale, Plus, ChevronDown } from 'lucide-react'
+import type { AppData, MealLog } from '../types'
 
 function todayStr() {
   return localDateStr()
 }
 
 export default function Home() {
-  const { data, saveData } = useAppStore()
+  const data = useAppStore(s => s.data)
   const [today, setToday] = useState(todayStr)
 
   // 日付が変わったら today を更新（1分ごとにチェック）
@@ -49,9 +50,11 @@ export default function Home() {
   const totalCaloriesIn = todayMeals.reduce(
     (sum, m) => sum + m.entries.reduce((s, e) => s + e.calories, 0), 0
   )
-  const totalCaloriesOut =
+  const exerciseKcal =
     todayCardio.reduce((sum, c) => sum + c.caloriesBurned, 0) +
-    todayStrength.reduce((sum, s) => sum + (s.estimatedCalories ?? 0), 0) +
+    todayStrength.reduce((sum, s) => sum + (s.estimatedCalories ?? 0), 0)
+  const totalCaloriesOut =
+    exerciseKcal +
     (stepsIsToday ? stepsCalories : 0)
 
   // 今日の合計PFC・塩分
@@ -76,9 +79,253 @@ export default function Home() {
   const goalCarbsLow    = Math.round(Math.max(0, goal - goalProteinHigh * 4 - goalFatHigh * 9) / 4)
   const goalCarbsHigh   = Math.round(Math.max(0, goal - goalProteinLow  * 4 - goalFatLow  * 9) / 4)
 
-  const hasApiKey = hasAiKey()
+  return (
+    <div className="p-4 space-y-4">
 
-  // アドバイス
+      {/* 今日のまとめ（カロリー＋体重・睡眠・歩数・運動） */}
+      <TodaySummaryCard
+        goal={goal}
+        caloriesIn={totalCaloriesIn}
+        caloriesOut={totalCaloriesOut}
+        remaining={remaining}
+        weight={todayBody?.weight}
+        bodyFatPct={todayBody?.bodyFatPct}
+        sleepMin={totalSleepMin}
+        steps={displayStepLog ? todaySteps : undefined}
+        stepsLabel={stepsIsToday || !displayStepLog ? '歩数' : `歩数(${displayStepLog.date.slice(5).replace('-', '/')})`}
+        exerciseKcal={exerciseKcal}
+        exerciseCount={todayCardio.length + todayStrength.length}
+      />
+
+      <SectionTitle>習慣</SectionTitle>
+      {/* 連続記録 */}
+      <StreakCard data={data} today={today} />
+      {/* セルフケア（歯磨き・入浴・スキンケア） */}
+      <SelfCareCard />
+      {/* ちょっとだけ運動 */}
+      <QuickExerciseCard date={today} />
+
+      <SectionTitle>食事</SectionTitle>
+      <MealSummaryCard
+        meals={todayMeals}
+        totals={{ protein: totalProtein, fat: totalFat, carbs: totalCarbs, salt: totalSaltG }}
+        goals={{
+          protein: [goalProteinLow, goalProteinHigh],
+          fat:     [goalFatLow, goalFatHigh],
+          carbs:   [goalCarbsLow, goalCarbsHigh],
+        }}
+      />
+
+      <SectionTitle>ごほうび・ふりかえり</SectionTitle>
+      {/* ご褒美 */}
+      <RewardCard />
+      {/* トロフィー */}
+      <TrophySection data={data} />
+      {/* AIアドバイス */}
+      <AdviceCard today={today} />
+
+    </div>
+  )
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <h2 className="text-xs font-semibold text-gray-400 px-1 pt-2 -mb-1">{children}</h2>
+}
+
+function TodaySummaryCard({
+  goal, caloriesIn, caloriesOut, remaining,
+  weight, bodyFatPct, sleepMin, steps, stepsLabel, exerciseKcal, exerciseCount,
+}: {
+  goal: number
+  caloriesIn: number
+  caloriesOut: number
+  remaining: number
+  weight?: number
+  bodyFatPct?: number
+  sleepMin: number
+  steps?: number
+  stepsLabel: string
+  exerciseKcal: number
+  exerciseCount: number
+}) {
+  // 摂取が「目標＋消費」のどこまで来たか
+  const budget = Math.max(1, goal + caloriesOut)
+  const ratio = Math.min(1, caloriesIn / budget)
+  const over = remaining < 0
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-gradient-to-br from-green-500 to-emerald-600 text-white p-4">
+        <p className="text-xs text-white/80">
+          {new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
+        </p>
+        <div className="flex items-end justify-between gap-2 mt-1">
+          <div>
+            <p className="text-xs text-white/80">{over ? '目標をオーバー' : 'あと食べられる'}</p>
+            <p className="leading-none mt-1">
+              <span className="text-4xl font-bold tabular-nums">{Math.abs(remaining).toLocaleString()}</span>
+              <span className="text-sm ml-1">kcal</span>
+            </p>
+          </div>
+          <Link to="/meal" className="flex items-center gap-1 rounded-full bg-white/20 hover:bg-white/30 px-3 py-1.5 text-xs font-semibold shrink-0">
+            <Plus size={14} /> 食事を記録
+          </Link>
+        </div>
+        <div className="h-2 rounded-full bg-white/25 mt-3 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${over ? 'bg-red-300' : 'bg-white'}`}
+            style={{ width: `${ratio * 100}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs text-white/90 mt-1.5 tabular-nums">
+          <span>摂取 <b>{caloriesIn.toLocaleString()}</b></span>
+          <span>消費 <b>{caloriesOut.toLocaleString()}</b></span>
+          <span>目標 <b>{goal.toLocaleString()}</b></span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 divide-x divide-gray-100">
+        <MiniStat
+          to="/body" icon={<Scale size={14} className="text-blue-400" />} label="体重"
+          value={weight != null ? weight.toFixed(1) : undefined} unit="kg"
+          sub={bodyFatPct != null ? `${bodyFatPct}%` : undefined}
+        />
+        <MiniStat
+          to="/report" icon={<Moon size={14} className="text-indigo-400" />} label="睡眠"
+          value={sleepMin > 0 ? `${Math.floor(sleepMin / 60)}:${String(sleepMin % 60).padStart(2, '0')}` : undefined}
+        />
+        <MiniStat
+          to="/report" icon={<Footprints size={14} className="text-teal-400" />} label={stepsLabel}
+          value={steps != null ? steps.toLocaleString() : undefined}
+        />
+        <MiniStat
+          to="/exercise" icon={<Dumbbell size={14} className="text-orange-400" />} label="運動"
+          value={exerciseCount > 0 ? String(exerciseKcal) : undefined} unit="kcal"
+          sub={exerciseCount > 0 ? `${exerciseCount}件` : undefined}
+        />
+      </div>
+    </div>
+  )
+}
+
+function MiniStat({
+  to, icon, label, value, unit, sub,
+}: { to: string; icon: ReactNode; label: string; value?: string; unit?: string; sub?: string }) {
+  return (
+    <Link to={to} className="flex flex-col items-center justify-center py-3 px-1 min-w-0 hover:bg-gray-50 active:bg-gray-50 transition">
+      <span className="flex items-center gap-1 text-[10px] text-gray-400 whitespace-nowrap">{icon}{label}</span>
+      {value != null ? (
+        <span className="mt-1 text-base font-bold text-gray-800 tabular-nums leading-tight truncate max-w-full">
+          {value}{unit && <span className="text-[10px] font-normal text-gray-400 ml-0.5">{unit}</span>}
+        </span>
+      ) : (
+        <span className="mt-1 text-sm text-gray-300 leading-tight">未記録</span>
+      )}
+      <span className="text-[10px] text-gray-400 h-3.5 leading-3.5">{sub ?? ''}</span>
+    </Link>
+  )
+}
+
+const MEAL_TYPES: { type: MealLog['mealType']; label: string; icon: string }[] = [
+  { type: 'breakfast', label: '朝食', icon: '🌅' },
+  { type: 'lunch',     label: '昼食', icon: '☀️' },
+  { type: 'dinner',    label: '夕食', icon: '🌙' },
+  { type: 'snack',     label: '間食', icon: '🍪' },
+]
+
+function MealSummaryCard({
+  meals, totals, goals,
+}: {
+  meals: MealLog[]
+  totals: { protein: number; fat: number; carbs: number; salt: number }
+  goals: { protein: [number, number]; fat: [number, number]; carbs: [number, number] }
+}) {
+  const [openType, setOpenType] = useState<MealLog['mealType'] | null>(null)
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      {/* PFC・塩分 */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+        <NutrientBar label="たんぱく質" value={totals.protein} low={goals.protein[0]} high={goals.protein[1]} color="bg-blue-400" />
+        <NutrientBar label="脂質"       value={totals.fat}     low={goals.fat[0]}     high={goals.fat[1]}     color="bg-yellow-400" />
+        <NutrientBar label="炭水化物"   value={totals.carbs}   low={goals.carbs[0]}   high={goals.carbs[1]}   color="bg-orange-400" />
+        <NutrientBar label="塩分"       value={totals.salt}    low={0}                high={6}                color="bg-red-300" maxOnly />
+      </div>
+
+      {/* 食事ごと（タップで中身を開く） */}
+      <div className="mt-4 divide-y divide-gray-100 border-t border-gray-100">
+        {MEAL_TYPES.map(({ type, label, icon }) => {
+          const entries = meals.filter(m => m.mealType === type).flatMap(m => m.entries)
+          const cal = entries.reduce((s, e) => s + e.calories, 0)
+          const open = openType === type && entries.length > 0
+          return (
+            <div key={type}>
+              <button
+                onClick={() => setOpenType(open ? null : type)}
+                disabled={entries.length === 0}
+                className="w-full flex items-center gap-2 py-2.5 text-left"
+              >
+                <span className="text-base w-6 text-center">{icon}</span>
+                <span className="text-sm font-medium text-gray-700 shrink-0">{label}</span>
+                {entries.length > 0 ? (
+                  <>
+                    <span className="text-xs text-gray-400 truncate flex-1 min-w-0">
+                      {entries.map(e => e.foodName).join('、')}
+                    </span>
+                    <span className="text-sm font-bold text-green-600 tabular-nums shrink-0">{cal} kcal</span>
+                    <ChevronDown size={16} className={`text-gray-300 shrink-0 transition ${open ? 'rotate-180' : ''}`} />
+                  </>
+                ) : (
+                  <span className="text-xs text-gray-300 flex-1">未記録</span>
+                )}
+              </button>
+              {open && (
+                <ul className="text-xs text-gray-500 pb-2.5 pl-8 space-y-0.5">
+                  {entries.map((e, i) => (
+                    <li key={i} className="flex justify-between gap-2">
+                      <span className="truncate">{e.foodName}（{e.grams}g）</span>
+                      <span className="tabular-nums shrink-0">{e.calories}kcal</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <Link to="/meal" className="mt-2 flex items-center justify-center gap-1 rounded-xl bg-green-50 text-green-700 text-sm font-semibold py-2 hover:bg-green-100 transition">
+        <Plus size={16} /> 食事を記録する
+      </Link>
+    </div>
+  )
+}
+
+/** 栄養素の摂取量と目標レンジ。レンジ内なら緑、超えたら赤 */
+function NutrientBar({
+  label, value, low, high, color, maxOnly = false,
+}: { label: string; value: number; low: number; high: number; color: string; maxOnly?: boolean }) {
+  const over = value > high
+  const inRange = !over && value >= low && value > 0
+  const ratio = Math.min(1, value / Math.max(1, high))
+  return (
+    <div className="min-w-0">
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="text-[11px] text-gray-500 whitespace-nowrap">{label}</span>
+        <span className={`text-xs font-bold tabular-nums whitespace-nowrap ${over ? 'text-red-500' : inRange ? 'text-green-600' : 'text-gray-600'}`}>
+          {value.toFixed(1)}<span className="text-[10px] font-normal text-gray-400">/{maxOnly ? `${high}以下` : `${low}〜${high}`}g</span>
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-gray-100 mt-1 overflow-hidden">
+        <div className={`h-full rounded-full ${over ? 'bg-red-500' : color}`} style={{ width: `${ratio * 100}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function AdviceCard({ today }: { today: string }) {
+  const { data, saveData } = useAppStore()
+  const hasApiKey = hasAiKey()
   const [dailyAdvice,   setDailyAdvice]   = useState<string | null>(null)
   const [weeklyAdvice,  setWeeklyAdvice]  = useState<string | null>(null)
   const [adviceScore,   setAdviceScore]   = useState<number | null>(null)
@@ -121,276 +368,72 @@ export default function Home() {
   }
 
   return (
-    <div className="p-4 space-y-4">
-
-      {/* 日付 */}
-      <div className="text-center py-2">
-        <p className="text-sm text-gray-500">
-          {new Date().toLocaleDateString('ja-JP', {
-            year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
-          })}
-        </p>
-      </div>
-
-      {/* 連続記録 */}
-      <StreakCard data={data} today={today} />
-
-      {/* ご褒美 */}
-      <RewardCard />
-
-      {/* セルフケア（歯磨き・入浴・スキンケア） */}
-      <SelfCareCard />
-
-      {/* ちょっとだけ運動 */}
-      <QuickExerciseCard date={today} />
-
-      {/* カロリーサマリー */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-500 mb-3">今日のカロリー</h2>
-        <div className="flex justify-around text-center">
-          <Stat label="目標"   value={String(goal)}            color="text-blue-500" />
-          <Stat label="摂取"   value={String(totalCaloriesIn)} color="text-green-500" />
-          <Stat label="消費"   value={String(totalCaloriesOut)} color="text-orange-500" />
-          <Stat label="残り"   value={String(remaining)}        color={remaining >= 0 ? 'text-gray-700' : 'text-red-500'} />
-        </div>
-      </div>
-
-      {/* 体重 */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-500 mb-2">今日の体重</h2>
-        {todayBody ? (
-          <div className="flex gap-4">
-            <StatText label="体重"   value={`${todayBody.weight.toFixed(2)} kg`} />
-            {todayBody.bodyFatPct != null && <StatText label="体脂肪率" value={`${todayBody.bodyFatPct} %`} />}
-            {todayBody.bmi        != null && <StatText label="BMI"      value={String(todayBody.bmi)} />}
-          </div>
-        ) : (
-          <p className="text-gray-400 text-sm">未記録</p>
-        )}
-      </div>
-
-      {/* 睡眠 */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
-          <Moon size={14} className="text-indigo-400" /> 今日の睡眠
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="font-semibold text-gray-700 flex items-center gap-1.5">
+          <Sparkles size={16} className="text-purple-400" /> AIアドバイス
         </h2>
-        {totalSleepMin > 0 ? (
-          <div className="flex items-end gap-1">
-            <span className="text-2xl font-bold text-indigo-500">
-              {Math.floor(totalSleepMin / 60)}
-            </span>
-            <span className="text-sm text-gray-400 mb-0.5">時間</span>
-            <span className="text-2xl font-bold text-indigo-500 ml-1">
-              {totalSleepMin % 60}
-            </span>
-            <span className="text-sm text-gray-400 mb-0.5">分</span>
-          </div>
-        ) : (
-          <p className="text-gray-400 text-sm">未記録（Health Connect から同期できます）</p>
+        {hasApiKey && (
+          <button
+            onClick={handleAdvice}
+            disabled={adviceLoading}
+            className="flex items-center gap-1 rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-600 hover:bg-purple-100 disabled:opacity-40 transition"
+          >
+            <RefreshCw size={12} className={adviceLoading ? 'animate-spin' : ''} />
+            {adviceLoading ? '生成中...' : '今すぐ取得'}
+          </button>
         )}
       </div>
 
-      {/* 歩数 */}
-      {displayStepLog && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
-            <Footprints size={14} className="text-teal-400" />
-            {stepsIsToday ? '今日の歩数' : `歩数（${displayStepLog.date}）`}
-          </h2>
-          <div className="flex items-end gap-4">
-            <div>
-              <span className="text-2xl font-bold text-teal-500">{todaySteps.toLocaleString()}</span>
-              <span className="text-sm text-gray-400 ml-1">歩</span>
-            </div>
-            <div className="mb-0.5">
-              <span className="text-sm text-orange-500 font-semibold">{stepsCalories} kcal</span>
-              <span className="text-xs text-gray-400 ml-1">消費</span>
+      {!hasApiKey && (
+        <Link to="/settings?s=ai" className="text-xs text-gray-400 underline">設定でAPIキーを登録するとアドバイスが表示されます</Link>
+      )}
+
+      {hasApiKey && !dailyAdvice && !weeklyAdvice && !adviceLoading && !adviceError && (
+        <p className="text-xs text-gray-400">「今すぐ取得」を押すと、今日と今週の記録からAIがアドバイスします</p>
+      )}
+
+      {adviceLoading && (
+        <p className="text-sm text-gray-400 animate-pulse">アドバイスを生成中...</p>
+      )}
+
+      {adviceError && (
+        <p className="text-xs text-red-500 break-all">✗ {adviceError}</p>
+      )}
+
+      {adviceScore != null && (
+        <div className="flex items-center gap-3 mb-3 p-3 bg-purple-50 rounded-xl">
+          <div className="text-center shrink-0">
+            <p className={`text-3xl font-bold ${adviceScore >= 80 ? 'text-green-500' : adviceScore >= 60 ? 'text-yellow-500' : 'text-red-500'}`}>
+              {adviceScore}
+            </p>
+            <p className="text-xs text-gray-400">/ 100点</p>
+          </div>
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-purple-600">今日の健康スコア</p>
+            <div className="mt-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${adviceScore >= 80 ? 'bg-green-500' : adviceScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                style={{ width: `${adviceScore}%` }}
+              />
             </div>
           </div>
         </div>
       )}
 
-      {/* 今日の運動 */}
-      {(todayCardio.length > 0 || todayStrength.length > 0) && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
-            <Dumbbell size={14} className="text-orange-400" /> 今日の運動
-          </h2>
-          <div className="space-y-2">
-            {todayCardio.map((c) => (
-              <div key={c.id} className="flex justify-between items-center text-sm">
-                <span className="text-gray-700">{c.name}</span>
-                <div className="flex gap-3 text-xs text-gray-500">
-                  <span>{c.durationMin}分</span>
-                  <span className="text-orange-500 font-semibold">{c.caloriesBurned} kcal</span>
-                </div>
-              </div>
-            ))}
-            {todayStrength.map((s) => (
-              <div key={s.id} className="flex justify-between items-center text-sm">
-                <span className="text-gray-700">{s.name}</span>
-                <div className="flex gap-3 text-xs text-gray-500">
-                  <span>{s.sets.length}セット</span>
-                  {s.estimatedCalories != null && (
-                    <span className="text-orange-500 font-semibold">{s.estimatedCalories} kcal</span>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div className="pt-2 border-t border-gray-100 flex justify-end">
-              <span className="text-xs text-gray-500">合計消費 </span>
-              <span className="text-sm font-bold text-orange-500 ml-1">
-                {todayCardio.reduce((s, c) => s + c.caloriesBurned, 0) +
-                 todayStrength.reduce((s, t) => s + (t.estimatedCalories ?? 0), 0)} kcal
-              </span>
-            </div>
-          </div>
+      {dailyAdvice && (
+        <div className="mb-3">
+          <p className="text-xs font-semibold text-purple-600 mb-1">📅 今日の総括</p>
+          <p className="text-sm text-gray-700 whitespace-pre-line">{dailyAdvice}</p>
         </div>
       )}
 
-      {/* 今日の食事 */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-500 mb-3">今日の食事</h2>
-        {todayMeals.length === 0 ? (
-          <p className="text-gray-400 text-sm">未記録</p>
-        ) : (
-          <>
-            <div className="space-y-3">
-              {todayMeals.map((m) => {
-                const cal  = m.entries.reduce((s, e) => s + e.calories, 0)
-                const prot = m.entries.reduce((s, e) => s + e.protein, 0)
-                const fat  = m.entries.reduce((s, e) => s + e.fat, 0)
-                const carb = m.entries.reduce((s, e) => s + e.carbs, 0)
-                const salt = m.entries.reduce((s, e) => s + (e.sodium ?? 0), 0) * 2.54 / 1000
-                const label = { breakfast: '朝食', lunch: '昼食', dinner: '夕食', snack: '間食' }[m.mealType]
-                return (
-                  <div key={m.id} className="border border-gray-100 rounded-xl p-3">
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-sm font-semibold text-gray-700">{label}</span>
-                      <span className="text-sm font-bold text-green-600">{cal} kcal</span>
-                    </div>
-                    {/* 食品一覧 */}
-                    <ul className="text-xs text-gray-500 mb-2 space-y-0.5">
-                      {m.entries.map((e, i) => (
-                        <li key={i} className="flex justify-between">
-                          <span>{e.foodName}（{e.grams}g）</span>
-                          <span>{e.calories}kcal</span>
-                        </li>
-                      ))}
-                    </ul>
-                    {/* PFC + 塩分 */}
-                    <div className="flex gap-3 text-xs text-gray-500 pt-1.5 border-t border-gray-50">
-                      <span>P <b className="text-blue-500">{prot.toFixed(1)}g</b></span>
-                      <span>F <b className="text-yellow-500">{fat.toFixed(1)}g</b></span>
-                      <span>C <b className="text-orange-500">{carb.toFixed(1)}g</b></span>
-                      <span>塩分 <b className="text-red-400">{salt.toFixed(1)}g</b></span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* 1日合計PFC */}
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <p className="text-xs text-gray-400 mb-1.5">本日合計</p>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                <PfcRow
-                  label="P" labelColor="text-blue-500"
-                  value={totalProtein}
-                  low={goalProteinLow} high={goalProteinHigh}
-                />
-                <PfcRow
-                  label="F" labelColor="text-yellow-500"
-                  value={totalFat}
-                  low={goalFatLow} high={goalFatHigh}
-                />
-                <PfcRow
-                  label="C" labelColor="text-orange-500"
-                  value={totalCarbs}
-                  low={goalCarbsLow} high={goalCarbsHigh}
-                />
-                <span className="text-sm">
-                  塩分 <b className="text-red-400">{totalSaltG.toFixed(1)}g</b>
-                  <span className="text-xs text-gray-400 ml-1">/ 目安 6g以下</span>
-                </span>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* トロフィー */}
-      <TrophySection data={data} />
-
-      {/* AIアドバイス */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-500 flex items-center gap-1.5">
-            <Sparkles size={14} className="text-purple-400" /> アドバイス
-          </h2>
-          {hasApiKey && (
-            <button
-              onClick={handleAdvice}
-              disabled={adviceLoading}
-              className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-700 disabled:opacity-40 transition"
-            >
-              <RefreshCw size={12} className={adviceLoading ? 'animate-spin' : ''} />
-              {adviceLoading ? '生成中...' : '今すぐ取得'}
-            </button>
-          )}
+      {weeklyAdvice && (
+        <div className={dailyAdvice ? 'pt-3 border-t border-gray-100' : ''}>
+          <p className="text-xs font-semibold text-indigo-600 mb-1">📊 今週の総括</p>
+          <p className="text-sm text-gray-700 whitespace-pre-line">{weeklyAdvice}</p>
         </div>
-
-        {!hasApiKey && (
-          <p className="text-xs text-gray-400">設定ページでAPIキーを設定するとアドバイスが表示されます</p>
-        )}
-
-        {hasApiKey && !dailyAdvice && !weeklyAdvice && !adviceLoading && (
-          <p className="text-xs text-gray-400">「今すぐ取得」を押すとAIがアドバイスします</p>
-        )}
-
-        {adviceLoading && (
-          <p className="text-sm text-gray-400 animate-pulse">アドバイスを生成中...</p>
-        )}
-
-        {adviceError && (
-          <p className="text-xs text-red-500 break-all">✗ {adviceError}</p>
-        )}
-
-        {adviceScore != null && (
-          <div className="flex items-center gap-3 mb-3 p-3 bg-purple-50 rounded-xl">
-            <div className="text-center shrink-0">
-              <p className={`text-3xl font-bold ${adviceScore >= 80 ? 'text-green-500' : adviceScore >= 60 ? 'text-yellow-500' : 'text-red-500'}`}>
-                {adviceScore}
-              </p>
-              <p className="text-xs text-gray-400">/ 100点</p>
-            </div>
-            <div className="flex-1">
-              <p className="text-xs font-semibold text-purple-600">今日の健康スコア</p>
-              <div className="mt-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${adviceScore >= 80 ? 'bg-green-500' : adviceScore >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                  style={{ width: `${adviceScore}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {dailyAdvice && (
-          <div className="mb-3">
-            <p className="text-xs font-semibold text-purple-600 mb-1">📅 今日の総括</p>
-            <p className="text-sm text-gray-700 whitespace-pre-line">{dailyAdvice}</p>
-          </div>
-        )}
-
-        {weeklyAdvice && (
-          <div className={dailyAdvice ? 'pt-3 border-t border-gray-100' : ''}>
-            <p className="text-xs font-semibold text-indigo-600 mb-1">📊 今週の総括</p>
-            <p className="text-sm text-gray-700 whitespace-pre-line">{weeklyAdvice}</p>
-          </div>
-        )}
-      </div>
-
+      )}
     </div>
   )
 }
@@ -524,44 +567,5 @@ function StreakRow({ category, streak, today }: { category: StreakCategory; stre
         ))}
       </div>
     </div>
-  )
-}
-
-function Stat({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="text-center">
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
-      <p className="text-xs text-gray-400">{label}</p>
-    </div>
-  )
-}
-
-function StatText({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-lg font-bold text-gray-800">{value}</p>
-      <p className="text-xs text-gray-400">{label}</p>
-    </div>
-  )
-}
-
-function PfcRow({
-  label, labelColor, value, low, high,
-}: {
-  label: string
-  labelColor: string
-  value: number
-  low: number
-  high: number
-}) {
-  const over  = value > high
-  const under = value < low
-  const valueColor = over ? 'text-red-500' : under ? 'text-gray-500' : 'text-green-600'
-  return (
-    <span className="flex items-baseline gap-1 text-sm">
-      <span className={`font-semibold ${labelColor}`}>{label}</span>
-      <b className={valueColor}>{value.toFixed(1)}g</b>
-      <span className="text-xs text-gray-400">/ {low}〜{high}g</span>
-    </span>
   )
 }
