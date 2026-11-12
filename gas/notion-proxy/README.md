@@ -80,7 +80,7 @@ Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`s
 
 - `low`：在庫の数が入っていて、発注点以下の品目。
 - `stocktake`：最後の確認から30日以上たった品目のある保管場所のうち、確認が一番古いもの（未確認の品目がある場所が先、同じなら保管場所シートの順）。候補がなければ `null`。アプリは `appUrl?place=<placeId>` を開いて、その場所だけ棚卸しする。
-- スクリプトプロパティ `STOCK_SHEET_ID`（家計簿スプレッドシートのID）と `STOCK_APP_URL`（在庫アプリの /exec URL）が必要です。設定後、エディタで `debugStockStatus` を実行するとスプレッドシートを読む許可を求められます。
+- スクリプトプロパティ `STOCK_SHEET_ID`（家計簿スプレッドシートのID）と `STOCK_APP_URL`（在庫アプリの /exec URL）が必要です。設定後、エディタで `debugStockStatus` を実行するとスプレッドシートの許可を求められます（`SpreadsheetApp.openById` は読み取り専用スコープでは呼べないため `spreadsheets` を使う。コードは読むだけ）。
 
 ## セットアップ
 
