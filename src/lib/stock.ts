@@ -2,8 +2,8 @@ import { create } from 'zustand'
 import { callProxy, isRecipeProxyConfigured } from './recipeproxy'
 import type { StockReminderSettings } from '../types'
 
-// 日用品の在庫（家計簿スプレッドシート）を GAS 中継で読む。書き込むのは NFC タグからの「使った」と、
-// タグを書き込んだ印だけ。棚卸しや品目の編集は家計簿GASの在庫アプリ（appUrl）で行う
+// 日用品の在庫（家計簿スプレッドシート）を GAS 中継で読み書きする。FitLog で行うのは「使った」・棚卸しの数・
+// 保管場所の変更・タグを書き込んだ印。品目の追加や名前・発注点の編集は家計簿GASの在庫アプリ（appUrl）で行う
 
 export interface StockLowItem {
   name: string
@@ -67,18 +67,56 @@ export interface StockItem {
   min: number
   step: number           // 「使った」1回で減る数
   url: string
+  checked: string | null // 最終確認日 YYYY-MM-DD
+}
+
+export interface StockPlace {
+  id: string    // P01 など
+  name: string
+}
+
+/** 品目画面で使う品目（在庫アプリのURLと、保管場所を変えるときの選択肢つき） */
+export interface StockItemDetail extends StockItem {
+  appUrl: string
+  places: StockPlace[]
+}
+
+/** 保管場所の棚卸し：その場所の品目 */
+export interface StockPlaceDetail {
+  place: StockPlace
+  items: StockItem[]
   appUrl: string
 }
 
-export async function fetchStockItem(id: string): Promise<StockItem> {
-  const res = await callProxy<StockItem>({ action: 'stockItem', id })
+export async function fetchStockItem(id: string): Promise<StockItemDetail> {
+  const res = await callProxy<StockItemDetail>({ action: 'stockItem', id })
   if (!res.ok) throw new Error(res.error)
   return res.data
 }
 
 /** 在庫を増減する（在庫ログに残る）。reason は「使った」か「取り消し」 */
-export async function changeStockItem(id: string, delta: number, reason: '使った' | '取り消し'): Promise<StockItem> {
-  const res = await callProxy<StockItem>({ action: 'stockChange', id, delta, reason })
+export async function changeStockItem(id: string, delta: number, reason: '使った' | '取り消し'): Promise<StockItemDetail> {
+  const res = await callProxy<StockItemDetail>({ action: 'stockChange', id, delta, reason })
+  if (!res.ok) throw new Error(res.error)
+  return res.data
+}
+
+/** 棚卸し：実際の数を入れる（最終確認日も今日になる） */
+export async function setStockCount(id: string, count: number): Promise<StockItemDetail> {
+  const res = await callProxy<StockItemDetail>({ action: 'stockSetCount', id, count })
+  if (!res.ok) throw new Error(res.error)
+  return res.data
+}
+
+/** 保管場所を変える（保管場所シートにある場所だけ） */
+export async function setStockPlace(id: string, placeId: string): Promise<StockItemDetail> {
+  const res = await callProxy<StockItemDetail>({ action: 'stockSetPlace', id, placeId })
+  if (!res.ok) throw new Error(res.error)
+  return res.data
+}
+
+export async function fetchStockPlace(placeId: string): Promise<StockPlaceDetail> {
+  const res = await callProxy<StockPlaceDetail>({ action: 'stockPlace', id: placeId })
   if (!res.ok) throw new Error(res.error)
   return res.data
 }

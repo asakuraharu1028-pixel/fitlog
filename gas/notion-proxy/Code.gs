@@ -111,6 +111,12 @@ function doPost(e) {
         return json_({ ok: true, data: stockItem_(req.id) })
       case 'stockChange':
         return json_({ ok: true, data: stockChange_(req.id, req.delta, req.reason) })
+      case 'stockPlace':
+        return json_({ ok: true, data: stockPlace_(req.id) })
+      case 'stockSetCount':
+        return json_({ ok: true, data: stockSetCount_(req.id, req.count) })
+      case 'stockSetPlace':
+        return json_({ ok: true, data: stockSetPlace_(req.id, req.placeId) })
       case 'stockTags':
         return json_({ ok: true, data: stockTags_() })
       case 'stockTagDone':
@@ -529,7 +535,8 @@ function normalizeName_(name) {
 }
 
 // ---- 日用品の在庫（家計簿スプレッドシートの「在庫」「在庫ログ」「保管場所」シート） ----
-// 書き込むのは NFC タグからの「使った」（stockChange）だけ。棚卸しや品目の編集は家計簿GASの在庫アプリで行う
+// FitLog から書き込むのは「使った」（stockChange）、棚卸しの数（stockSetCount）、保管場所の変更（stockSetPlace）。
+// 品目の追加や名前・発注点の編集は家計簿GASの在庫アプリで行う
 
 // 列は家計簿GAS（stock.js）の SC・LOG_HEADERS と同じ並び
 const STOCK_COL = { NAME: 0, PLACE: 2, COUNT: 3, MIN: 4, URL: 7, CHECKED: 8, ID: 9, STEP: 10 }
@@ -602,26 +609,108 @@ function findStockItem_(ss, id) {
   for (let i = 0; i < values.length; i++) {
     const r = values[i]
     if (String(r[STOCK_COL.ID]).trim() !== id || !String(r[STOCK_COL.NAME]).trim()) continue
-    return {
-      sheet: sheet,
-      row: i + 2,
-      item: {
-        id: id,
-        name: String(r[STOCK_COL.NAME]).trim(),
-        place: String(r[STOCK_COL.PLACE]).trim(),
-        count: r[STOCK_COL.COUNT] === '' || r[STOCK_COL.COUNT] === null ? null : Number(r[STOCK_COL.COUNT]),
-        min: Number(r[STOCK_COL.MIN]) || 0,
-        step: Number(r[STOCK_COL.STEP]) || 1,
-        url: String(r[STOCK_COL.URL]).trim(),
-      },
-    }
+    return { sheet: sheet, row: i + 2, item: stockRowItem_(r) }
   }
   throw new Error('item not found')
 }
 
+// 在庫シートの1行を FitLog に返す品目の形にする
+function stockRowItem_(r) {
+  return {
+    id: String(r[STOCK_COL.ID]).trim(),
+    name: String(r[STOCK_COL.NAME]).trim(),
+    place: String(r[STOCK_COL.PLACE]).trim(),
+    count: r[STOCK_COL.COUNT] === '' || r[STOCK_COL.COUNT] === null ? null : Number(r[STOCK_COL.COUNT]),
+    min: Number(r[STOCK_COL.MIN]) || 0,
+    step: Number(r[STOCK_COL.STEP]) || 1,
+    url: String(r[STOCK_COL.URL]).trim(),
+    checked: r[STOCK_COL.CHECKED] instanceof Date ? ymd_(r[STOCK_COL.CHECKED]) : null,
+  }
+}
+
+function ymd_(d) {
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+}
+
+// 保管場所シートの上から順（棚卸しで回る順）。{ id, name }
+function stockPlaces_(ss) {
+  const sheet = ss.getSheetByName('保管場所')
+  const n = sheet.getLastRow() - 1
+  if (n <= 0) return []
+  return sheet.getRange(2, 1, n, 2).getValues()
+    .map(function (r) { return { name: String(r[0]).trim(), id: String(r[1]).trim() } })
+    .filter(function (p) { return p.name && p.id })
+}
+
+// 品目（appUrl と保管場所の一覧つき）。FitLog の品目画面で使う
+function withPlaces_(ss, item) {
+  return Object.assign(item, { appUrl: prop_('STOCK_APP_URL'), places: stockPlaces_(ss) })
+}
+
+// 保管場所タグ：その場所の品目を在庫シートの順に返す（棚卸し用）
+function stockPlace_(id) {
+  if (typeof id !== 'string' || !/^P\d+$/.test(id)) throw new Error('invalid id')
+  const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+  const place = stockPlaces_(ss).filter(function (p) { return p.id === id })[0]
+  if (!place) throw new Error('place not found')
+  const sheet = ss.getSheetByName('在庫')
+  const n = sheet.getLastRow() - 1
+  const values = n > 0 ? sheet.getRange(2, 1, n, STOCK_COL.STEP + 1).getValues() : []
+  const items = []
+  values.forEach(function (r) {
+    const itemId = String(r[STOCK_COL.ID]).trim()
+    if (!String(r[STOCK_COL.NAME]).trim() || !itemId || String(r[STOCK_COL.PLACE]).trim() !== place.name) return
+    items.push(stockRowItem_(r))
+  })
+  return { place: place, items: items, appUrl: prop_('STOCK_APP_URL') }
+}
+
 function stockItem_(id) {
   const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
-  return Object.assign(findStockItem_(ss, id).item, { appUrl: prop_('STOCK_APP_URL') })
+  return withPlaces_(ss, findStockItem_(ss, id).item)
+}
+
+// 棚卸し：実際の数を入れ、最終確認日を今日にする（家計簿GASの setStockCount と同じ書き方）
+function stockSetCount_(id, count) {
+  const n = Number(count)
+  if (!isFinite(n) || n < 0 || n > 10000 || Math.floor(n) !== n) throw new Error('invalid count')
+  const lock = LockService.getScriptLock()
+  lock.waitLock(20000)
+  try {
+    const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+    const found = findStockItem_(ss, id)
+    const before = found.item.count === null ? 0 : found.item.count
+    const now = new Date()
+    found.sheet.getRange(found.row, STOCK_COL.COUNT + 1).setValue(n)
+    found.sheet.getRange(found.row, STOCK_COL.CHECKED + 1).setValue(now)
+    const log = ss.getSheetByName('在庫ログ')
+    log.getRange(log.getLastRow() + 1, 1, 1, STOCK_LOG_COLS)
+      .setValues([[now, found.item.name, n - before, n, '棚卸し', '', 'FitLog']])
+    SpreadsheetApp.flush()
+    found.item.count = n
+    found.item.checked = ymd_(now)
+    return withPlaces_(ss, found.item)
+  } finally {
+    lock.releaseLock()
+  }
+}
+
+// 保管場所を変える。保管場所シートにある場所（ID で指定）だけ選べる
+function stockSetPlace_(id, placeId) {
+  const lock = LockService.getScriptLock()
+  lock.waitLock(20000)
+  try {
+    const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+    const place = stockPlaces_(ss).filter(function (p) { return p.id === placeId })[0]
+    if (!place) throw new Error('place not found')
+    const found = findStockItem_(ss, id)
+    found.sheet.getRange(found.row, STOCK_COL.PLACE + 1).setValue(place.name)
+    SpreadsheetApp.flush()
+    found.item.place = place.name
+    return withPlaces_(ss, found.item)
+  } finally {
+    lock.releaseLock()
+  }
 }
 
 // 在庫を増減して在庫ログに残す（家計簿GASの changeStock と同じ書き方）。0 未満にはしない
@@ -642,7 +731,7 @@ function stockChange_(id, delta, reason) {
       .setValues([[new Date(), found.item.name, after - before, after, reason, '', 'FitLog（NFCタグ）']])
     SpreadsheetApp.flush()
     found.item.count = after
-    return Object.assign(found.item, { appUrl: prop_('STOCK_APP_URL') })
+    return withPlaces_(ss, found.item)
   } finally {
     lock.releaseLock()
   }

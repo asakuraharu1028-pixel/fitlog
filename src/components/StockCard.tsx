@@ -1,5 +1,6 @@
 import { Package, RefreshCw } from 'lucide-react'
-import { amazonUrl, isStockConfigured, stockAppUrl, useStockStore } from '../lib/stock'
+import { Link } from 'react-router-dom'
+import { amazonUrl, isStockConfigured, useStockStore } from '../lib/stock'
 
 /** 日用品の在庫（家計簿GAS）：要購入の品目と、今週棚卸しする保管場所。どちらもなければ出さない */
 export default function StockCard() {
@@ -56,10 +57,8 @@ export default function StockCard() {
       )}
 
       {st && (
-        <a
-          href={stockAppUrl(status, st.placeId)}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          to={`/stock?place=${encodeURIComponent(st.placeId)}`}
           className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5"
         >
           <div className="flex-1 min-w-0">
@@ -69,7 +68,7 @@ export default function StockCard() {
             </p>
           </div>
           <span className="text-xs text-amber-700 shrink-0">開く ›</span>
-        </a>
+        </Link>
       )}
     </div>
   )

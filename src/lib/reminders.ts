@@ -6,7 +6,7 @@ import { computeAllStreaks, recordedDates, STREAK_CATEGORIES, STREAK_CATEGORY_ME
 import { hasExerciseOn } from './quickexercise'
 import { localDateStr } from './utils'
 import { careLogOn, resolveCareItems } from './selfcare'
-import { loadStockStatus, resolveStockReminder, stockAppUrl } from './stock'
+import { loadStockStatus, resolveStockReminder } from './stock'
 
 export const REMINDER_KINDS: ReminderKind[] = ['weight', 'breakfast', 'lunch', 'dinner', 'exercise', 'streak']
 
@@ -203,7 +203,7 @@ function stockNotifications(data: AppData, now: Date, character: AdvisorCharacte
         largeBody: body,
         channelId: CHANNEL_ID,
         schedule: { at, allowWhileIdle: true },
-        extra: { url: stockAppUrl(status, st.placeId) },
+        extra: { route: `/stock?place=${encodeURIComponent(st.placeId)}` },
       })
     }
   }

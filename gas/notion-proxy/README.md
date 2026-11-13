@@ -121,6 +121,21 @@ NFCタグ（`fitlog://stock?item=T01`）からアプリを開いたときは、�
 
 「全員」に公開しても、正しい Google アカウントのトークンがない呼び出しは `forbidden` / `unauthorized` で断ります。
 
+## 棚卸しと保管場所の変更（stockPlace / stockSetCount / stockSetPlace）
+
+FitLog の品目画面（`#/stock?item=T01`）と保管場所の棚卸し画面（`#/stock?place=P01`）が使います。
+
+```json
+{ "action": "stockPlace", "token": "...", "id": "P01" }
+{ "action": "stockSetCount", "token": "...", "id": "T01", "count": 12 }
+{ "action": "stockSetPlace", "token": "...", "id": "T01", "placeId": "P02" }
+```
+
+- `stockPlace` はその保管場所の品目を在庫シートの順に返します（`{ place, items, appUrl }`）。
+- `stockSetCount` は実際の数を入れ、最終確認日を今日にし、「在庫ログ」に理由「棚卸し」で残します（家計簿GASの `setStockCount` と同じ）。
+- `stockSetPlace` は保管場所シートにある場所（ID で指定）にだけ移せます。
+- `stockItem` / `stockChange` / `stockSetCount` / `stockSetPlace` の結果には、最終確認日 `checked` と保管場所の一覧 `places` が付きます。
+
 ## NFCタグの書き込み（stockTags / stockTagDone）
 
 FitLog の「NFCタグを書き込む」画面（`#/stock/tags`）が使います。家計簿スプレッドシートの「NFCタグ」シートを読み書きします。
