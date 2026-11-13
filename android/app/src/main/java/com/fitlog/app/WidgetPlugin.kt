@@ -14,7 +14,28 @@ class WidgetPlugin : Plugin() {
     companion object {
         /** ウィジェットのタップで開く画面（例: "/exercise"）を渡す Intent extra */
         const val EXTRA_ROUTE = "widget_route"
+
+        /**
+         * Intent から開く画面を取り出し、二重に処理しないよう消す。
+         * ウィジェットは EXTRA_ROUTE、NFC タグは fitlog://stock?item=T01 → "/stock?item=T01"
+         */
+        fun takeRoute(intent: Intent?): String? {
+            if (intent == null) return null
+            intent.getStringExtra(EXTRA_ROUTE)?.let {
+                intent.removeExtra(EXTRA_ROUTE)
+                return it
+            }
+            val data = intent.data ?: return null
+            if (data.scheme != "fitlog" || data.host != "stock") return null
+            intent.data = null
+            intent.action = null
+            val query = data.encodedQuery
+            return if (query.isNullOrEmpty()) "/stock" else "/stock?$query"
+        }
     }
+
+    /** リスナー登録前に届いた画面指定 */
+    private var pendingRoute: String? = null
 
     @PluginMethod
     fun updateData(call: PluginCall) {
@@ -47,17 +68,20 @@ class WidgetPlugin : Plugin() {
     /** ウィジェットからアプリを起動したときの画面を返し、二重に処理しないよう消す */
     @PluginMethod
     fun consumeLaunchRoute(call: PluginCall) {
-        val intent = activity?.intent
-        val route = intent?.getStringExtra(EXTRA_ROUTE)
-        intent?.removeExtra(EXTRA_ROUTE)
+        val route = pendingRoute ?: takeRoute(activity?.intent)
+        pendingRoute = null
         call.resolve(JSObject().put("route", route))
     }
 
     /** アプリ起動中にウィジェットがタップされたときは、イベントで画面を知らせる */
     override fun handleOnNewIntent(intent: Intent) {
         super.handleOnNewIntent(intent)
-        val route = intent.getStringExtra(EXTRA_ROUTE) ?: return
-        intent.removeExtra(EXTRA_ROUTE)
+        val route = takeRoute(intent) ?: return
+        // 起動直後（NFC タグでの起動など）は Web 側のリスナーがまだないので、consumeLaunchRoute で渡す
+        if (!hasListeners("routeRequested")) {
+            pendingRoute = route
+            return
+        }
         notifyListeners("routeRequested", JSObject().put("route", route))
     }
 }

@@ -21,8 +21,9 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(HealthConnectPlugin.class);
         registerPlugin(WidgetPlugin.class);
         // 復元時（プロセス終了後など）は起動時の Intent がそのまま戻るので、処理済みのウィジェットの画面指定を消す
+        // NFC タグの fitlog:// も同じく消す
         if (savedInstanceState != null) {
-            getIntent().removeExtra(WidgetPlugin.EXTRA_ROUTE);
+            WidgetPlugin.Companion.takeRoute(getIntent());
         }
         super.onCreate(savedInstanceState);
 

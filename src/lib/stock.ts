@@ -58,6 +58,31 @@ export function amazonUrl(item: StockLowItem): string {
   return item.url || `https://www.amazon.co.jp/s?k=${encodeURIComponent(item.name)}`
 }
 
+/** NFC タグ（fitlog://stock?item=T01）から開いた品目 */
+export interface StockItem {
+  id: string
+  name: string
+  place: string
+  count: number | null   // 未棚卸しなら null
+  min: number
+  step: number           // 「使った」1回で減る数
+  url: string
+  appUrl: string
+}
+
+export async function fetchStockItem(id: string): Promise<StockItem> {
+  const res = await callProxy<StockItem>({ action: 'stockItem', id })
+  if (!res.ok) throw new Error(res.error)
+  return res.data
+}
+
+/** 在庫を増減する（在庫ログに残る）。reason は「使った」か「取り消し」 */
+export async function changeStockItem(id: string, delta: number, reason: '使った' | '取り消し'): Promise<StockItem> {
+  const res = await callProxy<StockItem>({ action: 'stockChange', id, delta, reason })
+  if (!res.ok) throw new Error(res.error)
+  return res.data
+}
+
 interface StockStore {
   status: StockStatus | null
   error: string | null

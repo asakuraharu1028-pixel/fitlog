@@ -67,7 +67,7 @@ Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`s
 
 ## 日用品の在庫（stockStatus）
 
-家計簿スプレッドシートの「在庫」「保管場所」シート（家計簿GASの在庫管理）を読み、要購入の品目と棚卸しを勧める保管場所を返します。書き込みはしません。
+家計簿スプレッドシートの「在庫」「保管場所」シート（家計簿GASの在庫管理）を読み、要購入の品目と棚卸しを勧める保管場所を返します。
 
 ```json
 { "action": "stockStatus", "token": "..." }
@@ -80,7 +80,18 @@ Notion の「DB_レシピリスト」を読み、fitlog の `Recipe` 形式（`s
 
 - `low`：在庫の数が入っていて、発注点以下の品目。
 - `stocktake`：最後の確認から30日以上たった品目のある保管場所のうち、確認が一番古いもの（未確認の品目がある場所が先、同じなら保管場所シートの順）。候補がなければ `null`。アプリは `appUrl?place=<placeId>` を開いて、その場所だけ棚卸しする。
-- スクリプトプロパティ `STOCK_SHEET_ID`（家計簿スプレッドシートのID）と `STOCK_APP_URL`（在庫アプリの /exec URL）が必要です。設定後、エディタで `debugStockStatus` を実行するとスプレッドシートの許可を求められます（`SpreadsheetApp.openById` は読み取り専用スコープでは呼べないため `spreadsheets` を使う。コードは読むだけ）。
+- スクリプトプロパティ `STOCK_SHEET_ID`（家計簿スプレッドシートのID）と `STOCK_APP_URL`（在庫アプリの /exec URL）が必要です。設定後、エディタで `debugStockStatus` を実行するとスプレッドシートの許可を求められます（`SpreadsheetApp.openById` は読み取り専用スコープでは呼べないため `spreadsheets` を使う）。
+
+NFCタグ（`fitlog://stock?item=T01`）からアプリを開いたときは、次の2つを使います。
+
+```json
+{ "action": "stockItem", "token": "...", "id": "T01" }
+{ "action": "stockChange", "token": "...", "id": "T01", "delta": -5, "reason": "使った" }
+{ "ok": true, "data": { "id": "T01", "name": "トイレットペーパー", "place": "リビング・押入れ", "count": 19, "min": 5, "step": 5, "url": "...", "appUrl": "..." } }
+```
+
+- `stockChange` は在庫の数を増減し（0未満にはしない）、「在庫ログ」に家計簿GASと同じ形で1行残します（メモは「FitLog（NFCタグ）」）。`reason` は `使った` か `取り消し` だけ受け付けます。
+- 書き込むのはこれだけです。棚卸し（実数の入力）や品目の編集は家計簿GASの在庫アプリで行います。
 
 ## セットアップ
 

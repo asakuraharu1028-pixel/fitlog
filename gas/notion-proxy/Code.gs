@@ -20,6 +20,8 @@
  *   { "action": "deleteRecipe", "token": "...", "id": "<ページID>" }           → data: { id }
  *   { "action": "importRecipes", "token": "...", "recipes": [<Recipe>...] }
  *   { "action": "stockStatus", "token": "..." }  → data: 要購入の品目と、棚卸しを勧める保管場所
+ *   { "action": "stockItem", "token": "...", "id": "T01" }  → data: 品目1件（NFCタグから開いたとき）
+ *   { "action": "stockChange", "token": "...", "id": "T01", "delta": -1, "reason": "使った" } → data: 変更後の品目
  * 応答:
  *   { "ok": true, "data": { "version": 1, "recipes": [...], "fetchedAt": "..." } }
  *   { "ok": false, "error": "unauthorized" }
@@ -105,6 +107,10 @@ function doPost(e) {
         return json_({ ok: true, data: deleteRecipe_(req.id) })
       case 'stockStatus':
         return json_({ ok: true, data: stockStatus_() })
+      case 'stockItem':
+        return json_({ ok: true, data: stockItem_(req.id) })
+      case 'stockChange':
+        return json_({ ok: true, data: stockChange_(req.id, req.delta, req.reason) })
       default:
         return json_({ ok: false, error: 'unknown action' })
     }
@@ -518,10 +524,13 @@ function normalizeName_(name) {
   return String(name || '').normalize('NFKC').replace(/\s+/g, '')
 }
 
-// ---- 日用品の在庫（家計簿スプレッドシートの「在庫」「保管場所」シートを読むだけ） ----
+// ---- 日用品の在庫（家計簿スプレッドシートの「在庫」「在庫ログ」「保管場所」シート） ----
+// 書き込むのは NFC タグからの「使った」（stockChange）だけ。棚卸しや品目の編集は家計簿GASの在庫アプリで行う
 
-// 列は家計簿GAS（stock.js）の SC と同じ並び
-const STOCK_COL = { NAME: 0, PLACE: 2, COUNT: 3, MIN: 4, URL: 7, CHECKED: 8 }
+// 列は家計簿GAS（stock.js）の SC・LOG_HEADERS と同じ並び
+const STOCK_COL = { NAME: 0, PLACE: 2, COUNT: 3, MIN: 4, URL: 7, CHECKED: 8, ID: 9, STEP: 10 }
+const STOCK_LOG_COLS = 7  // 日時, 品名, 増減, 変更後の在庫, 理由, 参照, メモ
+const STOCK_REASONS = ['使った', '取り消し']
 // 最後の確認からこの日数がたった保管場所を棚卸しの候補にする
 const STOCKTAKE_STALE_DAYS = 30
 
@@ -577,6 +586,61 @@ function stockStatus_() {
     low: low,
     stocktake: stocktake,
     fetchedAt: new Date().toISOString(),
+  }
+}
+
+// ID（T01 など）で品目を1件探す。row はシートの行番号
+function findStockItem_(ss, id) {
+  if (typeof id !== 'string' || !/^T\d+$/.test(id)) throw new Error('invalid id')
+  const sheet = ss.getSheetByName('在庫')
+  const n = sheet.getLastRow() - 1
+  const values = n > 0 ? sheet.getRange(2, 1, n, STOCK_COL.STEP + 1).getValues() : []
+  for (let i = 0; i < values.length; i++) {
+    const r = values[i]
+    if (String(r[STOCK_COL.ID]).trim() !== id || !String(r[STOCK_COL.NAME]).trim()) continue
+    return {
+      sheet: sheet,
+      row: i + 2,
+      item: {
+        id: id,
+        name: String(r[STOCK_COL.NAME]).trim(),
+        place: String(r[STOCK_COL.PLACE]).trim(),
+        count: r[STOCK_COL.COUNT] === '' || r[STOCK_COL.COUNT] === null ? null : Number(r[STOCK_COL.COUNT]),
+        min: Number(r[STOCK_COL.MIN]) || 0,
+        step: Number(r[STOCK_COL.STEP]) || 1,
+        url: String(r[STOCK_COL.URL]).trim(),
+      },
+    }
+  }
+  throw new Error('item not found')
+}
+
+function stockItem_(id) {
+  const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+  return Object.assign(findStockItem_(ss, id).item, { appUrl: prop_('STOCK_APP_URL') })
+}
+
+// 在庫を増減して在庫ログに残す（家計簿GASの changeStock と同じ書き方）。0 未満にはしない
+function stockChange_(id, delta, reason) {
+  const d = Number(delta)
+  if (!isFinite(d) || d === 0 || Math.abs(d) > 100 || Math.floor(d) !== d) throw new Error('invalid delta')
+  if (STOCK_REASONS.indexOf(reason) < 0) throw new Error('invalid reason')
+  const lock = LockService.getScriptLock()
+  lock.waitLock(20000)
+  try {
+    const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+    const found = findStockItem_(ss, id)
+    const before = found.item.count === null ? 0 : found.item.count
+    const after = Math.max(0, before + d)
+    found.sheet.getRange(found.row, STOCK_COL.COUNT + 1).setValue(after)
+    const log = ss.getSheetByName('在庫ログ')
+    log.getRange(log.getLastRow() + 1, 1, 1, STOCK_LOG_COLS)
+      .setValues([[new Date(), found.item.name, after - before, after, reason, '', 'FitLog（NFCタグ）']])
+    SpreadsheetApp.flush()
+    found.item.count = after
+    return Object.assign(found.item, { appUrl: prop_('STOCK_APP_URL') })
+  } finally {
+    lock.releaseLock()
   }
 }
 
