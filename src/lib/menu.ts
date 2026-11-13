@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { CalendarDays, BarChart2, ChefHat, BookOpen, ShoppingCart, Settings } from 'lucide-react'
+import { CalendarDays, BarChart2, ChefHat, BookOpen, ShoppingCart, Package, Settings } from 'lucide-react'
 
 export interface MenuItem {
   to: string
@@ -30,6 +30,12 @@ export const MENU_GROUPS: MenuGroup[] = [
       { to: '/mealplan', icon: ChefHat, label: '献立', description: 'AIで5日分を作る', tone: 'bg-amber-50 text-amber-500' },
       { to: '/recipedb', icon: BookOpen, label: 'レシピ', description: '登録したレシピ', tone: 'bg-orange-50 text-orange-500' },
       { to: '/shoppinglist', icon: ShoppingCart, label: '買い物リスト', description: '献立から自動作成', tone: 'bg-emerald-50 text-emerald-500' },
+    ],
+  },
+  {
+    title: '暮らし',
+    items: [
+      { to: '/stock', icon: Package, label: '日用品の在庫', description: '要購入・棚卸し・NFCタグ', tone: 'bg-amber-50 text-amber-500' },
     ],
   },
   {

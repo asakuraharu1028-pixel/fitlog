@@ -26,6 +26,21 @@ interface FitlogWidgetPlugin {
   } & Partial<StreakWidgetFields>): Promise<{ updated: number }>
   consumeLaunchRoute(): Promise<{ route?: string | null }>
   addListener(event: 'routeRequested', fn: (e: { route: string }) => void): Promise<{ remove: () => void }>
+  startNfcWrite(opts: { uri: string }): Promise<NfcWriteAvailability>
+  stopNfcWrite(): Promise<void>
+  addListener(event: 'nfcWriteResult', fn: (e: NfcWriteResult) => void): Promise<{ remove: () => void }>
+}
+
+export interface NfcWriteAvailability {
+  available: boolean   // 端末に NFC があるか
+  enabled: boolean     // NFC がオンか
+}
+
+/** error: read-only（書き込み禁止のタグ）/ too-small（容量不足）/ not-ndef（対応していないタグ）/ io（途中で離れたなど） */
+export interface NfcWriteResult {
+  uri: string
+  ok: boolean
+  error?: 'read-only' | 'too-small' | 'not-ndef' | 'io'
 }
 
 const FitlogWidget = registerPlugin<FitlogWidgetPlugin>('FitlogWidget', {
@@ -33,8 +48,18 @@ const FitlogWidget = registerPlugin<FitlogWidgetPlugin>('FitlogWidget', {
     async updateData() { return { updated: 0 } },
     async consumeLaunchRoute() { return { route: null } },
     async addListener() { return { remove: () => {} } },
+    async startNfcWrite() { return { available: false, enabled: false } },
+    async stopNfcWrite() {},
   },
 })
+
+/**
+ * NFC タグの書き込みモード。start で次に書く内容を渡し（書き込みモード中に呼ぶと内容だけ変わる）、
+ * かざしたタグに書けたかどうかは onNfcWriteResult で受け取る
+ */
+export const startNfcWrite = (uri: string) => FitlogWidget.startNfcWrite({ uri })
+export const stopNfcWrite = () => FitlogWidget.stopNfcWrite()
+export const onNfcWriteResult = (fn: (e: NfcWriteResult) => void) => FitlogWidget.addListener('nfcWriteResult', fn)
 
 const STATUS_CHAR: Record<DayStatus, string> = { recorded: 'R', frozen: 'F', missed: 'M', pending: 'P' }
 

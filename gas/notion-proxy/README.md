@@ -120,3 +120,15 @@ NFCタグ（`fitlog://stock?item=T01`）からアプリを開いたときは、�
    - コードを直したときは「デプロイを管理」→ 編集 →「新バージョン」で更新すると、URL が変わりません。
 
 「全員」に公開しても、正しい Google アカウントのトークンがない呼び出しは `forbidden` / `unauthorized` で断ります。
+
+## NFCタグの書き込み（stockTags / stockTagDone）
+
+FitLog の「NFCタグを書き込む」画面（`#/stock/tags`）が使います。家計簿スプレッドシートの「NFCタグ」シートを読み書きします。
+
+```json
+{ "action": "stockTags", "token": "..." }
+{ "action": "stockTagDone", "token": "...", "id": "T01" }
+```
+
+- `stockTags` は ID が `P01` / `T01` の形の行を、`{ type, id, name, place, uri, done, memo }` の一覧で返します。
+- `stockTagDone` は、その ID の行の「書き込み済み」にチェックを入れます。

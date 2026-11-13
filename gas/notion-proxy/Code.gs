@@ -111,6 +111,10 @@ function doPost(e) {
         return json_({ ok: true, data: stockItem_(req.id) })
       case 'stockChange':
         return json_({ ok: true, data: stockChange_(req.id, req.delta, req.reason) })
+      case 'stockTags':
+        return json_({ ok: true, data: stockTags_() })
+      case 'stockTagDone':
+        return json_({ ok: true, data: stockTagDone_(req.id) })
       default:
         return json_({ ok: false, error: 'unknown action' })
     }
@@ -642,6 +646,53 @@ function stockChange_(id, delta, reason) {
   } finally {
     lock.releaseLock()
   }
+}
+
+// ---- NFCタグの書き込み（家計簿スプレッドシートの「NFCタグ」シート） ----
+// 列：種類, ID, 名前, 保管場所, 書き込む内容, 書き込み済み, メモ。ID が P01 / T01 の形の行だけを読む
+const TAG_COL = { ID: 1, NAME: 2, PLACE: 3, URI: 4, DONE: 5, MEMO: 6 }
+const TAG_ID_RE = /^[PT]\d+$/
+
+function tagSheet_() {
+  const sheet = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID')).getSheetByName('NFCタグ')
+  if (!sheet) throw new Error('tag sheet not found')
+  return sheet
+}
+
+function stockTags_() {
+  const sheet = tagSheet_()
+  const n = sheet.getLastRow()
+  const values = n > 0 ? sheet.getRange(1, 1, n, TAG_COL.MEMO + 1).getValues() : []
+  const tags = []
+  values.forEach(function (r) {
+    const id = String(r[TAG_COL.ID]).trim()
+    const uri = String(r[TAG_COL.URI]).trim()
+    if (!TAG_ID_RE.test(id) || uri.indexOf('fitlog:') !== 0) return
+    tags.push({
+      type: id.charAt(0) === 'P' ? 'place' : 'item',
+      id: id,
+      name: String(r[TAG_COL.NAME]).trim(),
+      place: String(r[TAG_COL.PLACE]).trim(),
+      uri: uri,
+      done: r[TAG_COL.DONE] === true,
+      memo: String(r[TAG_COL.MEMO]).trim(),
+    })
+  })
+  return { tags: tags }
+}
+
+// 書き込めたタグの「書き込み済み」にチェックを入れる
+function stockTagDone_(id) {
+  if (typeof id !== 'string' || !TAG_ID_RE.test(id)) throw new Error('invalid id')
+  const sheet = tagSheet_()
+  const n = sheet.getLastRow()
+  const ids = n > 0 ? sheet.getRange(1, TAG_COL.ID + 1, n, 1).getValues() : []
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]).trim() !== id) continue
+    sheet.getRange(i + 1, TAG_COL.DONE + 1).setValue(true)
+    return { id: id, done: true }
+  }
+  throw new Error('tag not found')
 }
 
 // エディタから実行して設定を確かめる用（認証は通さない）。初回はスプレッドシートを読む許可を求められる

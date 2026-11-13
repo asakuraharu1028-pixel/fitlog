@@ -2,8 +2,8 @@ import { create } from 'zustand'
 import { callProxy, isRecipeProxyConfigured } from './recipeproxy'
 import type { StockReminderSettings } from '../types'
 
-// 日用品の在庫（家計簿スプレッドシート）を GAS 中継の stockStatus で読む。読むだけで書き込まない。
-// 数の更新や棚卸しは家計簿GASの在庫アプリ（appUrl）で行う
+// 日用品の在庫（家計簿スプレッドシート）を GAS 中継で読む。書き込むのは NFC タグからの「使った」と、
+// タグを書き込んだ印だけ。棚卸しや品目の編集は家計簿GASの在庫アプリ（appUrl）で行う
 
 export interface StockLowItem {
   name: string
@@ -81,6 +81,29 @@ export async function changeStockItem(id: string, delta: number, reason: '使っ
   const res = await callProxy<StockItem>({ action: 'stockChange', id, delta, reason })
   if (!res.ok) throw new Error(res.error)
   return res.data
+}
+
+/** 「NFCタグ」シートの1行（タグ1枚） */
+export interface StockTag {
+  type: 'place' | 'item'
+  id: string
+  name: string
+  place: string
+  uri: string     // fitlog://stock?item=T01 など
+  done: boolean   // 書き込み済み
+  memo: string
+}
+
+export async function fetchStockTags(): Promise<StockTag[]> {
+  const res = await callProxy<{ tags: StockTag[] }>({ action: 'stockTags' })
+  if (!res.ok) throw new Error(res.error)
+  return res.data.tags
+}
+
+/** 書き込めたタグの「書き込み済み」にチェックを入れる */
+export async function markStockTagDone(id: string): Promise<void> {
+  const res = await callProxy<{ id: string; done: boolean }>({ action: 'stockTagDone', id })
+  if (!res.ok) throw new Error(res.error)
 }
 
 interface StockStore {

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Package } from 'lucide-react'
+import { ChevronRight, ExternalLink, Nfc, Package, RefreshCw } from 'lucide-react'
+import { isNative } from '../lib/auth'
 import { useAppStore } from '../lib/store'
 import { syncReminders } from '../lib/reminders'
 import {
-  changeStockItem, fetchStockItem, stockAppUrl, useStockStore, type StockItem,
+  amazonUrl, changeStockItem, fetchStockItem, isStockConfigured, stockAppUrl, useStockStore, type StockItem,
 } from '../lib/stock'
 
-// NFC タグ（fitlog://stock?item=T01 / ?place=P01）から開く日用品の画面。
+// 日用品の画面。メニューから開くと要購入・棚卸し・在庫アプリ・タグ書き込みへの入口を出す。
+// NFC タグ（fitlog://stock?item=T01 / ?place=P01）から開いたときは、
 // 品目タグはここで「使った」を記録し、保管場所タグは家計簿GASの在庫アプリ（棚卸し画面）をブラウザで開く
 
 /** 在庫が変わったら、ホームのカードと通知（要購入）を新しい状況に合わせる */
@@ -31,7 +33,7 @@ export default function Stock() {
       </div>
       {itemId ? <ItemView key={itemId} id={itemId} />
         : placeId ? <PlaceView key={placeId} id={placeId} />
-        : <p className="text-sm text-gray-500 px-1">タグの内容が読めませんでした（item か place がありません）</p>}
+        : <StockHub />}
     </div>
   )
 }
@@ -158,5 +160,110 @@ function PlaceView({ id }: { id: string }) {
         もう一度開く
       </a>
     </div>
+  )
+}
+
+/** メニューから開いたとき：要購入、今週の棚卸し、在庫アプリとタグ書き込みへの入口 */
+function StockHub() {
+  const { status, error, loading, refresh } = useStockStore()
+
+  // 開いたときは最新の在庫を読む
+  useEffect(() => { useStockStore.getState().refresh(true) }, [])
+
+  if (!isStockConfigured()) {
+    return <p className="text-sm text-gray-500 px-1">日用品の在庫は、GAS 中継（VITE_RECIPE_PROXY_URL）を設定すると使えます。</p>
+  }
+  if (!status) {
+    return error
+      ? <p className="text-sm text-gray-500 px-1">在庫を読めませんでした（{error}）</p>
+      : <p className="text-sm text-gray-400 text-center py-10">読み込み中...</p>
+  }
+  const st = status.stocktake
+
+  return (
+    <>
+      <div className="bg-white rounded-2xl p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold text-gray-700">🛒 要購入</p>
+          <button
+            onClick={() => refresh(true)}
+            disabled={loading}
+            className="text-gray-400 disabled:opacity-40"
+            aria-label="在庫を読み直す"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+        {status.low.length === 0 ? (
+          <p className="text-sm text-gray-400">いまは要購入の品目はありません</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {status.low.map(item => (
+              <li key={item.name} className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-700 truncate">{item.name}</p>
+                  <p className="text-xs text-gray-400 truncate">残り{item.count}{item.place ? `・${item.place}` : ''}</p>
+                </div>
+                <a
+                  href={amazonUrl(item)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs px-3 py-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 shrink-0"
+                >
+                  Amazon
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {st && (
+        <a
+          href={stockAppUrl(status, st.placeId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3"
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-amber-800">📦 今週の棚卸し：{st.place}</p>
+            <p className="text-xs text-amber-700/80">
+              {st.itemCount}品目・{st.lastChecked ? `最終確認 ${st.lastChecked.slice(5).replace('-', '/')}` : '未確認の品目あり'}
+            </p>
+          </div>
+          <span className="text-xs text-amber-700 shrink-0">開く ›</span>
+        </a>
+      )}
+
+      <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100 overflow-hidden">
+        <a
+          href={stockAppUrl(status)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 px-4 py-3"
+        >
+          <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-amber-50 text-amber-500">
+            <Package size={20} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-gray-700">在庫アプリを開く</span>
+            <span className="block text-xs text-gray-400 truncate">数を直す・棚卸し・品目の追加（ブラウザで開く）</span>
+          </span>
+          <ExternalLink size={16} className="text-gray-300 shrink-0" />
+        </a>
+        {isNative && (
+          <Link to="/stock/tags" className="flex items-center gap-3 px-4 py-3">
+            <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-orange-50 text-orange-500">
+              <Nfc size={20} />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-semibold text-gray-700">NFCタグを書き込む</span>
+              <span className="block text-xs text-gray-400 truncate">「NFCタグ」シートの順にかざして書く</span>
+            </span>
+            <ChevronRight size={18} className="text-gray-300 shrink-0" />
+          </Link>
+        )}
+      </div>
+    </>
   )
 }

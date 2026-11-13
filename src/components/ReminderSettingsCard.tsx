@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { useAppStore } from '../lib/store'
 import { isNative } from '../lib/auth'
@@ -139,6 +140,11 @@ export default function ReminderSettingsCard() {
                   📦 しばらく確認していない保管場所があるときだけ、週1回その場所を知らせます（タップで棚卸し画面へ）。
                   🛒 新しく要購入になった品目も、ONのあいだ1回だけ通知します（夜22時〜朝7時は朝に回します）
                 </p>
+                {isNative && (
+                  <Link to="/stock/tags" className="block text-xs text-amber-700 underline">
+                    🏷 日用品のNFCタグを書き込む
+                  </Link>
+                )}
               </div>
             )}
           </div>
