@@ -5,7 +5,7 @@ import { isNative } from '../lib/auth'
 import { fetchStockTags, markStockTagDone, type StockTag } from '../lib/stock'
 import { onNfcWriteResult, startNfcWrite, stopNfcWrite, type NfcWriteResult } from '../lib/widget'
 
-// 日用品の NFC タグをまとめて作る画面。「NFCタグ」シートの一覧を順に表示し、
+// 日用品の NFC タグをまとめて作る画面。保管場所と在庫の品目（家計簿の在庫・保管場所シート）を順に表示し、
 // かざしたタグに次の内容を書き込んで、書けたらシートの「書き込み済み」にチェックを入れて次へ進む
 
 type NfcState = 'starting' | 'ready' | 'off' | 'unavailable'
@@ -105,7 +105,7 @@ export default function StockTags() {
       {!isNative ? (
         <p className="text-sm text-gray-500 px-1">タグの書き込みは Android アプリでだけ使えます。</p>
       ) : loadError ? (
-        <p className="text-sm text-gray-500 px-1">「NFCタグ」シートを読めませんでした（{loadError}）</p>
+        <p className="text-sm text-gray-500 px-1">タグの一覧を読めませんでした（{loadError}）</p>
       ) : !tags ? (
         <p className="text-sm text-gray-400 text-center py-10">読み込み中...</p>
       ) : (

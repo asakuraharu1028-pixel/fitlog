@@ -138,12 +138,13 @@ FitLog の品目画面（`#/stock?item=T01`）と保管場所の棚卸し画面�
 
 ## NFCタグの書き込み（stockTags / stockTagDone）
 
-FitLog の「NFCタグを書き込む」画面（`#/stock/tags`）が使います。家計簿スプレッドシートの「NFCタグ」シートを読み書きします。
+FitLog の「NFCタグを書き込む」画面（`#/stock/tags`）が使います。
 
 ```json
 { "action": "stockTags", "token": "..." }
 { "action": "stockTagDone", "token": "...", "id": "T01" }
 ```
 
-- `stockTags` は ID が `P01` / `T01` の形の行を、`{ type, id, name, place, uri, done, memo }` の一覧で返します。
-- `stockTagDone` は、その ID の行の「書き込み済み」にチェックを入れます。
+- `stockTags` は「保管場所」シートの全場所と「在庫」シートの全品目（ID が `T01` の形のもの）を、`{ type, id, name, place, uri, done, memo }` の一覧で返します。並びは保管場所 → 品目（保管場所の順、同じ場所なら在庫シートの順）。家計簿の在庫アプリで品目を足せば、「NFCタグ」シートを触らなくても一覧に出ます。
+- `done` と `memo` は「NFCタグ」シートの同じ ID の行から取ります（行がなければ未書き込み・メモなし）。
+- `stockTagDone` は、その ID の行の「書き込み済み」にチェックを入れます。行がなければ末尾に足します。

@@ -738,50 +738,87 @@ function stockChange_(id, delta, reason) {
 }
 
 // ---- NFCタグの書き込み（家計簿スプレッドシートの「NFCタグ」シート） ----
-// 列：種類, ID, 名前, 保管場所, 書き込む内容, 書き込み済み, メモ。ID が P01 / T01 の形の行だけを読む
-const TAG_COL = { ID: 1, NAME: 2, PLACE: 3, URI: 4, DONE: 5, MEMO: 6 }
+// タグの一覧は「保管場所」「在庫」シートから作る（家計簿の在庫アプリで品目を足せば、そのまま一覧に出る）。
+// 「NFCタグ」シートは書き込み済みの印とメモを持つだけ。列：種類, ID, 名前, 保管場所, 書き込む内容, 書き込み済み, メモ
+const TAG_COL = { TYPE: 0, ID: 1, NAME: 2, PLACE: 3, URI: 4, DONE: 5, MEMO: 6 }
 const TAG_ID_RE = /^[PT]\d+$/
 
-function tagSheet_() {
-  const sheet = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID')).getSheetByName('NFCタグ')
+function tagSheet_(ss) {
+  const sheet = ss.getSheetByName('NFCタグ')
   if (!sheet) throw new Error('tag sheet not found')
   return sheet
 }
 
-function stockTags_() {
-  const sheet = tagSheet_()
+function tagUri_(id) {
+  return (id.charAt(0) === 'P' ? 'fitlog://stock?place=' : 'fitlog://stock?item=') + id
+}
+
+// NFCタグシートの行を ID で引く。{ row, done, memo }
+function tagRows_(sheet) {
   const n = sheet.getLastRow()
   const values = n > 0 ? sheet.getRange(1, 1, n, TAG_COL.MEMO + 1).getValues() : []
-  const tags = []
-  values.forEach(function (r) {
+  const rows = {}
+  values.forEach(function (r, i) {
     const id = String(r[TAG_COL.ID]).trim()
-    const uri = String(r[TAG_COL.URI]).trim()
-    if (!TAG_ID_RE.test(id) || uri.indexOf('fitlog:') !== 0) return
-    tags.push({
-      type: id.charAt(0) === 'P' ? 'place' : 'item',
-      id: id,
-      name: String(r[TAG_COL.NAME]).trim(),
-      place: String(r[TAG_COL.PLACE]).trim(),
-      uri: uri,
-      done: r[TAG_COL.DONE] === true,
-      memo: String(r[TAG_COL.MEMO]).trim(),
-    })
+    if (!TAG_ID_RE.test(id) || rows[id]) return
+    rows[id] = { row: i + 1, done: r[TAG_COL.DONE] === true, memo: String(r[TAG_COL.MEMO]).trim() }
   })
+  return rows
+}
+
+// 保管場所（シートの順）→ 品目（保管場所の順、同じ場所なら在庫シートの順）
+function stockTags_() {
+  const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+  const marks = tagRows_(tagSheet_(ss))
+  const places = stockPlaces_(ss)
+  const order = {}
+  places.forEach(function (p, i) { order[p.name] = i })
+
+  const sheet = ss.getSheetByName('在庫')
+  const n = sheet.getLastRow() - 1
+  const items = (n > 0 ? sheet.getRange(2, 1, n, STOCK_COL.ID + 1).getValues() : [])
+    .map(function (r, i) {
+      return { id: String(r[STOCK_COL.ID]).trim(), name: String(r[STOCK_COL.NAME]).trim(), place: String(r[STOCK_COL.PLACE]).trim(), row: i }
+    })
+    .filter(function (it) { return it.name && /^T\d+$/.test(it.id) })
+  const rank = function (it) { return it.place in order ? order[it.place] : places.length }
+  items.sort(function (a, b) { return rank(a) - rank(b) || a.row - b.row })
+
+  const tag = function (type, id, name, place) {
+    const m = marks[id]
+    return { type: type, id: id, name: name, place: place, uri: tagUri_(id), done: !!(m && m.done), memo: m ? m.memo : '' }
+  }
+  const tags = places.filter(function (p) { return TAG_ID_RE.test(p.id) })
+    .map(function (p) { return tag('place', p.id, p.name, '') })
+    .concat(items.map(function (it) { return tag('item', it.id, it.name, it.place) }))
   return { tags: tags }
 }
 
-// 書き込めたタグの「書き込み済み」にチェックを入れる
+// 書き込めたタグの「書き込み済み」にチェックを入れる。シートに行がなければ末尾に足す
 function stockTagDone_(id) {
   if (typeof id !== 'string' || !TAG_ID_RE.test(id)) throw new Error('invalid id')
-  const sheet = tagSheet_()
-  const n = sheet.getLastRow()
-  const ids = n > 0 ? sheet.getRange(1, TAG_COL.ID + 1, n, 1).getValues() : []
-  for (let i = 0; i < ids.length; i++) {
-    if (String(ids[i][0]).trim() !== id) continue
-    sheet.getRange(i + 1, TAG_COL.DONE + 1).setValue(true)
+  const lock = LockService.getScriptLock()
+  lock.waitLock(20000)
+  try {
+    const sheet = tagSheet_(SpreadsheetApp.openById(prop_('STOCK_SHEET_ID')))
+    const m = tagRows_(sheet)[id]
+    if (m) {
+      sheet.getRange(m.row, TAG_COL.DONE + 1).setValue(true)
+    } else {
+      const r = sheet.getLastRow() + 1
+      // 名前・保管場所はほかの行と同じく数式で在庫・保管場所シートから引く
+      sheet.getRange(r, 1, 1, TAG_COL.MEMO + 1).setValues([[
+        id.charAt(0) === 'P' ? '保管場所' : '品目', id,
+        '=IF(A' + r + '="保管場所",INDEX(\'保管場所\'!A:A,MATCH(B' + r + ',\'保管場所\'!B:B,0)),INDEX(\'在庫\'!A:A,MATCH(B' + r + ',\'在庫\'!J:J,0)))',
+        '=IF(A' + r + '="保管場所","",INDEX(\'在庫\'!C:C,MATCH(B' + r + ',\'在庫\'!J:J,0)))',
+        tagUri_(id), true, '',
+      ]])
+    }
+    SpreadsheetApp.flush()
     return { id: id, done: true }
+  } finally {
+    lock.releaseLock()
   }
-  throw new Error('tag not found')
 }
 
 // エディタから実行して設定を確かめる用（認証は通さない）。初回はスプレッドシートを読む許可を求められる

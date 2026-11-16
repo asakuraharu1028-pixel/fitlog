@@ -121,7 +121,7 @@ export async function fetchStockPlace(placeId: string): Promise<StockPlaceDetail
   return res.data
 }
 
-/** 「NFCタグ」シートの1行（タグ1枚） */
+/** タグ1枚（保管場所か品目。書き込み済みとメモは「NFCタグ」シートから） */
 export interface StockTag {
   type: 'place' | 'item'
   id: string
