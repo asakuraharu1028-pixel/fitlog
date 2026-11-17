@@ -538,9 +538,45 @@ function normalizeName_(name) {
 // FitLog から書き込むのは「使った」（stockChange）、棚卸しの数（stockSetCount）、保管場所の変更（stockSetPlace）。
 // 品目の追加や名前・発注点の編集は家計簿GASの在庫アプリで行う
 
-// 列は家計簿GAS（stock.js）の SC・LOG_HEADERS と同じ並び
+// 列は家計簿GAS（stock.js）の SC・LOG_HEADERS と同じ並び。
+// 取り決めの正本は 家計簿_GAS/在庫シート仕様.md。列を変えるときはそちらと stock.js も同時に直す
 const STOCK_COL = { NAME: 0, PLACE: 2, COUNT: 3, MIN: 4, URL: 7, CHECKED: 8, ID: 9, STEP: 10 }
 const STOCK_LOG_COLS = 7  // 日時, 品名, 増減, 変更後の在庫, 理由, 参照, メモ
+
+// 見出し行の照合：シート名 → { 0始まりの列: 見出しの先頭の語 }。家計簿GASの STOCK_HEADERS / LOG_HEADERS / PLACES_HEADER と対応
+const STOCK_HEADER_CHECK = {
+  '在庫': {
+    [STOCK_COL.NAME]: '品名', [STOCK_COL.PLACE]: '保管場所', [STOCK_COL.COUNT]: '在庫', [STOCK_COL.MIN]: '発注点',
+    [STOCK_COL.URL]: 'AmazonのURL', [STOCK_COL.CHECKED]: '最終確認日', [STOCK_COL.ID]: 'ID', [STOCK_COL.STEP]: '「使った」',
+  },
+  '在庫ログ': { 0: '日時', 1: '品名', 2: '増減', 3: '変更後の在庫', 4: '理由', 5: '参照', 6: 'メモ' },
+  '保管場所': { 0: '保管場所', 1: 'ID' },
+}
+
+// 家計簿スプレッドシートを開き、在庫まわりのシートの列が想定どおりか確かめる。
+// 家計簿GAS側で列を足したり並べ替えたりしてずれたときに、違う列へ書き込まないように止める
+function openStockSpreadsheet_() {
+  const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+  checkStockHeaders_(ss)
+  return ss
+}
+
+function checkStockHeaders_(ss) {
+  Object.keys(STOCK_HEADER_CHECK).forEach(function (name) {
+    const sheet = ss.getSheetByName(name)
+    if (!sheet) throw new Error('stock sheet not found: ' + name)
+    const expect = STOCK_HEADER_CHECK[name]
+    const width = Math.max.apply(null, Object.keys(expect).map(Number)) + 1
+    const header = sheet.getRange(1, 1, 1, width).getValues()[0]
+    Object.keys(expect).forEach(function (col) {
+      const actual = String(header[col]).trim()
+      if (actual.indexOf(expect[col]) !== 0) {
+        throw new Error('stock sheet header mismatch: ' + name + ' column ' + (Number(col) + 1) +
+          ' expected "' + expect[col] + '…" but was "' + actual + '"（家計簿_GAS/在庫シート仕様.md を参照）')
+      }
+    })
+  })
+}
 const STOCK_REASONS = ['使った', '取り消し']
 // 最後の確認からこの日数がたった保管場所を棚卸しの候補にする
 const STOCKTAKE_STALE_DAYS = 30
@@ -548,7 +584,7 @@ const STOCKTAKE_STALE_DAYS = 30
 // 要購入：数が入っていて発注点以下の品目。
 // 棚卸し：確認が一番古い品目のある保管場所を1つ（未確認の品目があればその場所を優先、同じなら保管場所シートの順）
 function stockStatus_() {
-  const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+  const ss = openStockSpreadsheet_()
   const stockSheet = ss.getSheetByName('在庫')
   const placeSheet = ss.getSheetByName('保管場所')
   if (!stockSheet || !placeSheet) throw new Error('stock sheets not found')
@@ -650,7 +686,7 @@ function withPlaces_(ss, item) {
 // 保管場所タグ：その場所の品目を在庫シートの順に返す（棚卸し用）
 function stockPlace_(id) {
   if (typeof id !== 'string' || !/^P\d+$/.test(id)) throw new Error('invalid id')
-  const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+  const ss = openStockSpreadsheet_()
   const place = stockPlaces_(ss).filter(function (p) { return p.id === id })[0]
   if (!place) throw new Error('place not found')
   const sheet = ss.getSheetByName('在庫')
@@ -666,7 +702,7 @@ function stockPlace_(id) {
 }
 
 function stockItem_(id) {
-  const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+  const ss = openStockSpreadsheet_()
   return withPlaces_(ss, findStockItem_(ss, id).item)
 }
 
@@ -677,7 +713,7 @@ function stockSetCount_(id, count) {
   const lock = LockService.getScriptLock()
   lock.waitLock(20000)
   try {
-    const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+    const ss = openStockSpreadsheet_()
     const found = findStockItem_(ss, id)
     const before = found.item.count === null ? 0 : found.item.count
     const now = new Date()
@@ -700,7 +736,7 @@ function stockSetPlace_(id, placeId) {
   const lock = LockService.getScriptLock()
   lock.waitLock(20000)
   try {
-    const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+    const ss = openStockSpreadsheet_()
     const place = stockPlaces_(ss).filter(function (p) { return p.id === placeId })[0]
     if (!place) throw new Error('place not found')
     const found = findStockItem_(ss, id)
@@ -721,7 +757,7 @@ function stockChange_(id, delta, reason) {
   const lock = LockService.getScriptLock()
   lock.waitLock(20000)
   try {
-    const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+    const ss = openStockSpreadsheet_()
     const found = findStockItem_(ss, id)
     const before = found.item.count === null ? 0 : found.item.count
     const after = Math.max(0, before + d)
@@ -768,7 +804,7 @@ function tagRows_(sheet) {
 
 // 保管場所（シートの順）→ 品目（保管場所の順、同じ場所なら在庫シートの順）
 function stockTags_() {
-  const ss = SpreadsheetApp.openById(prop_('STOCK_SHEET_ID'))
+  const ss = openStockSpreadsheet_()
   const marks = tagRows_(tagSheet_(ss))
   const places = stockPlaces_(ss)
   const order = {}
@@ -800,7 +836,7 @@ function stockTagDone_(id) {
   const lock = LockService.getScriptLock()
   lock.waitLock(20000)
   try {
-    const sheet = tagSheet_(SpreadsheetApp.openById(prop_('STOCK_SHEET_ID')))
+    const sheet = tagSheet_(openStockSpreadsheet_())
     const m = tagRows_(sheet)[id]
     if (m) {
       sheet.getRange(m.row, TAG_COL.DONE + 1).setValue(true)
