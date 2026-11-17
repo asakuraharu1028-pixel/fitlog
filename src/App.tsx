@@ -19,6 +19,7 @@ import { isNative, initAuth, signIn, signInSilent } from './lib/auth'
 import { initReminderListeners, syncReminders } from './lib/reminders'
 import { useStockStore } from './lib/stock'
 import { initWidgetListeners } from './lib/widget'
+import { autoSyncHealthConnect } from './lib/hcsync'
 import LoginScreen from './components/LoginScreen'
 import Layout from './components/Layout'
 
@@ -50,6 +51,7 @@ function PageLoading() {
 
 export default function App() {
   const isAuthenticated = useAppStore((s) => s.isAuthenticated)
+  const isLoading = useAppStore((s) => s.isLoading)
   const [sdkReady, setSdkReady] = useState(isNative)
 
   // 起動時に1回だけ実行する（isAuthenticated に依存させると、ログイン直後に再実行されて読み込みが二重になる）
@@ -96,6 +98,16 @@ export default function App() {
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [isAuthenticated])
+
+  // Android：Drive の読み込みが終わったら Health Connect と自動同期し、前面に戻るたびにも同期する
+  // （権限がまだないときは何もしない。前回から15分以内なら飛ばす）
+  useEffect(() => {
+    if (!isNative || !isAuthenticated || isLoading) return
+    autoSyncHealthConnect()
+    const onVisible = () => { if (document.visibilityState === 'visible') autoSyncHealthConnect() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [isAuthenticated, isLoading])
 
   // OAuthコールバックはログイン状態に関係なく表示
   return (

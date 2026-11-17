@@ -11,6 +11,8 @@ import QuickExerciseCard from '../components/QuickExerciseCard'
 import SelfCareCard from '../components/SelfCareCard'
 import RewardCard from '../components/RewardCard'
 import StockCard from '../components/StockCard'
+import { isNative } from '../lib/auth'
+import { syncHealthConnect, useHcSyncStore, type HcSyncResult } from '../lib/hcsync'
 import { Sparkles, RefreshCw, Moon, Footprints, Dumbbell, Trophy, Scale, Plus, ChevronDown } from 'lucide-react'
 import type { AppData, MealLog } from '../types'
 
@@ -208,7 +210,45 @@ function TodaySummaryCard({
           sub={exerciseCount > 0 ? `${exerciseCount}件` : undefined}
         />
       </div>
+      {isNative && <HcSyncBar />}
     </div>
+  )
+}
+
+const HC_RESULT_MSG: Partial<Record<HcSyncResult, string>> = {
+  unavailable: 'Health Connect が使えません',
+  denied: '権限が許可されませんでした',
+}
+
+/** Health Connect の同期ボタン（Android のみ）。歩数・睡眠・体重をその場で取り込む */
+function HcSyncBar() {
+  const running    = useHcSyncStore(s => s.running)
+  const lastSyncAt = useHcSyncStore(s => s.lastSyncAt)
+  const error      = useHcSyncStore(s => s.error)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const last = lastSyncAt
+    ? new Date(lastSyncAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null
+  const status = running ? '同期中...'
+    : msg ?? (error ? `同期エラー：${error}` : last ? `最終同期 ${last}` : '未同期')
+
+  return (
+    <button
+      onClick={async () => {
+        setMsg(null)
+        const r = await syncHealthConnect({ interactive: true })
+        setMsg(HC_RESULT_MSG[r] ?? null)
+      }}
+      disabled={running}
+      className="w-full flex items-center justify-between gap-2 border-t border-gray-100 px-4 py-2 text-[11px] text-gray-400 hover:bg-gray-50 active:bg-gray-50 disabled:opacity-60 transition"
+    >
+      <span className={`truncate ${error || msg ? 'text-red-400' : ''}`}>Health Connect · {status}</span>
+      <span className="flex items-center gap-1 text-teal-600 font-semibold shrink-0">
+        <RefreshCw size={12} className={running ? 'animate-spin' : ''} />
+        同期
+      </span>
+    </button>
   )
 }
 

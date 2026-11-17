@@ -175,7 +175,11 @@ class HealthConnectPlugin : Plugin() {
                         time = instant,
                         zoneOffset = ZoneId.systemDefault().rules.getOffset(instant),
                         weight = Mass.kilograms(weightKg),
-                        metadata = Metadata.manualEntry()
+                        // 日付ごとに同じ ID で書き込み、再同期しても重複させず上書きする
+                        metadata = Metadata.manualEntry(
+                            clientRecordId = "fitlog-weight-$date",
+                            clientRecordVersion = System.currentTimeMillis()
+                        )
                     )
                 ))
                 withContext(Dispatchers.Main) { call.resolve(JSObject()) }
@@ -255,7 +259,10 @@ class HealthConnectPlugin : Plugin() {
                         time = instant,
                         zoneOffset = ZoneId.systemDefault().rules.getOffset(instant),
                         percentage = Percentage(bodyFatPct),
-                        metadata = Metadata.manualEntry()
+                        metadata = Metadata.manualEntry(
+                            clientRecordId = "fitlog-bodyfat-$date",
+                            clientRecordVersion = System.currentTimeMillis()
+                        )
                     )
                 ))
                 withContext(Dispatchers.Main) { call.resolve(JSObject()) }
