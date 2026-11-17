@@ -180,6 +180,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
             inputMode="numeric"
             value={manualInput}
             onChange={e => setManualInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleManualSubmit() }}
             placeholder="JANコード（例: 4901234567890）"
             className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
           />
@@ -193,7 +194,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         </div>
       )}
 
-      <p className="text-xs text-gray-400 text-center">JAN コード（EAN-13）対応</p>
+      <p className="text-xs text-gray-400 text-center">JAN コード（EAN-13）対応・バーコードリーダーならこの画面で読み取るだけでOK</p>
     </div>
   )
 }

@@ -13,6 +13,7 @@ import type { MealLog, FoodEntry, TemplateFoodItem, AdviceLog } from '../types'
 import { nanoid } from 'nanoid'
 import { Camera, Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, Sparkles, ScanBarcode, PackageSearch, CalendarRange, BookMarked, Upload, Search, BookOpen } from 'lucide-react'
 import BarcodeScanner from '../components/BarcodeScanner'
+import { useBarcodeReader } from '../lib/useBarcodeReader'
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 const MEAL_LABELS: Record<MealType, string> = {
@@ -544,7 +545,8 @@ export default function Meal() {
       }
       // ② OpenFoodFacts検索
       const result = await lookupBarcode(code)
-      setResults([result])
+      // リーダーで続けて読んだときに前の商品が消えないよう、結果に追加していく
+      setResults(prev => [...(prev ?? []), result])
     } catch (e) {
       if (e instanceof BarcodeNotFoundError) {
         setPendingBarcode(e.barcode)
@@ -558,6 +560,9 @@ export default function Meal() {
       setAnalyzing(false)
     }
   }
+
+  // バーコードリーダー：食事の追加を選ぶ画面・バーコード画面なら、ボタンを押さずに読み取るだけで追加する
+  useBarcodeReader(handleBarcodeDetected, (mode === 'idle' || mode === 'barcode') && !analyzing && !saving)
 
   const handleLabelCapture = async () => {
     try {
@@ -1059,6 +1064,12 @@ export default function Meal() {
             )}
           </div>
         )}
+
+        {mode === 'idle' && (analyzing ? (
+          <div className="mt-3 text-center text-sm text-gray-400 animate-pulse">商品情報を取得中...</div>
+        ) : (
+          <p className="mt-3 text-center text-xs text-gray-400">バーコードリーダーなら、この画面でそのまま読み取れます</p>
+        ))}
 
         {/* エラー */}
         {error && (
