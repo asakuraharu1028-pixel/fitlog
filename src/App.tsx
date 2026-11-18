@@ -1,9 +1,33 @@
 import { useEffect, useState, Component, lazy, Suspense } from 'react'
 import type { ReactNode } from 'react'
 
+// ── 公開し直したあと、古いページが消えた画面ファイルを読もうとして失敗したら、一度だけ再読み込みする ──
+const CHUNK_ERROR = /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i
+const CHUNK_RELOAD_KEY = 'fitlog-chunk-reload-at'
+
+/** 再読み込みしたら true。直前（10秒以内）に再読み込みしたばかりなら、繰り返さないよう false */
+function reloadForStaleChunk(message: string): boolean {
+  if (!CHUNK_ERROR.test(message)) return false
+  try {
+    const last = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) ?? 0)
+    if (Date.now() - last < 10_000) return false
+    sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()))
+  } catch {
+    return false
+  }
+  window.location.reload()
+  return true
+}
+
+window.addEventListener('vite:preloadError', (e) => {
+  const err = (e as Event & { payload?: unknown }).payload
+  if (reloadForStaleChunk(err instanceof Error ? err.message : String(err))) e.preventDefault()
+})
+
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   state = { error: null }
   static getDerivedStateFromError(e: Error) { return { error: e.message + '\n' + e.stack } }
+  componentDidCatch(e: Error) { reloadForStaleChunk(e.message) }
   render() {
     if (this.state.error) return (
       <div style={{ padding: 16, background: '#fee', fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
