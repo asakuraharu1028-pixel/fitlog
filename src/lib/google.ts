@@ -3,7 +3,9 @@ import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
 
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata'
+// drive.appdata: アプリ専用の隠し領域（記録データ）
+// drive.file: アプリが作ったファイルだけ（マイドライブへの CSV 書き出し）
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file'
 const FILE_NAME = 'fitlog-data.json'
 
 let tokenClient: google.accounts.oauth2.TokenClient | null = null
@@ -16,7 +18,7 @@ export async function initGoogleAuth(): Promise<void> {
   if (isNative) {
     await GoogleAuth.initialize({
       clientId: CLIENT_ID, // Web クライアントID（Android は google-services.json が処理）
-      scopes: [SCOPES],
+      scopes: SCOPES.split(' '),
       grantOfflineAccess: true,
     })
   }
@@ -218,5 +220,57 @@ export async function saveToDrive<T>(data: T): Promise<void> {
       }
     )
     if (!res.ok) throw new Error(`Drive upload error: ${res.status}`)
+  }
+}
+
+// ── マイドライブへの CSV 書き出し（drive.file スコープ） ─────────
+const FOLDER_MIME = 'application/vnd.google-apps.folder'
+
+function escapeQuery(v: string) {
+  return v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+}
+
+/** マイドライブ直下のフォルダを探し、なければ作って ID を返す */
+export async function ensureMyDriveFolder(name: string): Promise<string> {
+  const q = encodeURIComponent(
+    `name='${escapeQuery(name)}' and mimeType='${FOLDER_MIME}' and 'root' in parents and trashed=false`
+  )
+  const res = await driveRequest(`/files?spaces=drive&q=${q}&fields=files(id)`)
+  const found = (await res.json()).files?.[0]?.id as string | undefined
+  if (found) return found
+
+  const created = await driveRequest('/files?fields=id', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: ['root'] }),
+  })
+  return (await created.json()).id as string
+}
+
+/** フォルダ内で、名前が prefix で始まるファイル名の一覧 */
+export async function listFileNamesInFolder(folderId: string, prefix: string): Promise<string[]> {
+  const q = encodeURIComponent(
+    `'${escapeQuery(folderId)}' in parents and name contains '${escapeQuery(prefix)}' and trashed=false`
+  )
+  const res = await driveRequest(`/files?spaces=drive&q=${q}&fields=files(name)&pageSize=100`)
+  const files = ((await res.json()).files ?? []) as { name: string }[]
+  // name contains は前方一致ではないため、ここで絞り込む
+  return files.map((f) => f.name).filter((n) => n.startsWith(prefix))
+}
+
+/** フォルダに CSV ファイルを新規作成する */
+export async function uploadCsvToFolder(folderId: string, name: string, content: string): Promise<void> {
+  if (!accessToken) throw new Error('Not authenticated')
+  const meta = JSON.stringify({ name, mimeType: 'text/csv', parents: [folderId] })
+  const form = new FormData()
+  form.append('metadata', new Blob([meta], { type: 'application/json' }))
+  form.append('file', new Blob([content], { type: 'text/csv;charset=utf-8' }))
+  const res = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+    { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: form }
+  )
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Drive CSV upload error: ${res.status} - ${text}`)
   }
 }

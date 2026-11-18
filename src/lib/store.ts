@@ -5,6 +5,7 @@ import { localDateStr } from './utils'
 import { syncWidgetData } from './widget'
 import { syncReminders } from './reminders'
 import { mergeRewards } from './rewards'
+import { autoExportMonthlyCSV } from './autoExport'
 
 // id フィールドを持つレコードをマージ（ローカル優先、どちらにしかないものも保持）
 function mergeById<T extends { id: string }>(local: T[], remote: T[]): T[] {
@@ -170,6 +171,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         syncReminders(merged)
         // マージ結果を Drive にも書き戻す（ローカルのみのレコードを反映）
         saveToDrive(merged).catch((e) => console.warn('Drive write-back error:', e))
+        // 毎月1回、CSV をマイドライブに書き出す（権限がない・オフラインなどの失敗は記録だけして次回に回す）
+        autoExportMonthlyCSV(merged).catch((e) => console.warn('CSV auto-export error:', e))
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)

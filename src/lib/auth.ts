@@ -5,7 +5,11 @@ import { initGoogleAuth, requestAccessToken, setAccessToken } from './google'
 export const isNative = Capacitor.isNativePlatform()
 
 const WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata'
+// drive.appdata: 記録データ / drive.file: マイドライブへの CSV 書き出し
+const DRIVE_SCOPES = [
+  'https://www.googleapis.com/auth/drive.appdata',
+  'https://www.googleapis.com/auth/drive.file',
+]
 
 // Android サインイン用クライアント（Android OAuth クライアント）
 const ANDROID_CLIENT_ID = '685129420203-dufioist84icrt495iahbbqh67b76p6p.apps.googleusercontent.com'
@@ -18,7 +22,7 @@ export async function initAuth(): Promise<void> {
     await (GoogleAuth as any).initialize({
       clientId: ANDROID_CLIENT_ID,
       serverClientId: WEB_CLIENT_ID, // Web クライアントの serverAuthCode を要求
-      scopes: [DRIVE_SCOPE],
+      scopes: DRIVE_SCOPES,
       grantOfflineAccess: true,
     })
   } else {

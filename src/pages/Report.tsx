@@ -7,6 +7,7 @@ import {
   ResponsiveContainer, Legend,
 } from 'recharts'
 import { Download } from 'lucide-react'
+import { downloadCSV, type CsvKind } from '../lib/csvExport'
 
 type Period = 'week' | 'month'
 
@@ -28,23 +29,6 @@ function shortDate(date: string, period: Period) {
   return period === 'week'
     ? `${d.getMonth() + 1}/${d.getDate()}`
     : d.getDate() % 5 === 1 ? `${d.getMonth() + 1}/${d.getDate()}` : ''
-}
-
-// CSV生成
-function toCSV(rows: (string | number)[][], headers: string[]) {
-  const lines = [headers.join(','), ...rows.map((r) => r.join(','))]
-  return lines.join('\n')
-}
-
-function downloadCSV(content: string, filename: string) {
-  const bom = '﻿'
-  const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 export default function Report() {
@@ -125,47 +109,6 @@ export default function Report() {
   const weightChange = latestBody && oldestInRange && latestBody.date !== oldestInRange.date
     ? Math.round((latestBody.weight - oldestInRange.weight) * 10) / 10
     : null
-
-  // CSV エクスポート
-  const exportBodyCSV = () => {
-    const rows = data.bodyRecords
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map((r) => [r.date, r.weight, r.bodyFatPct ?? '', r.bmi ?? ''])
-    downloadCSV(toCSV(rows, ['日付', '体重(kg)', '体脂肪率(%)', 'BMI']), 'fitlog_body.csv')
-  }
-
-  const exportMealCSV = () => {
-    const rows: (string | number)[][] = []
-    data.mealLogs
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .forEach((log) => {
-        log.entries.forEach((e) => {
-          rows.push([log.date, log.mealType, e.foodName, e.grams, e.calories, e.protein, e.fat, e.carbs])
-        })
-      })
-    downloadCSV(
-      toCSV(rows, ['日付', '食事タイプ', '食品名', '量(g)', 'カロリー(kcal)', 'タンパク質(g)', '脂質(g)', '炭水化物(g)']),
-      'fitlog_meal.csv'
-    )
-  }
-
-  const exportExerciseCSV = () => {
-    const cardioRows = data.cardioLogs
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map((c) => [c.date, '有酸素', c.name, `${c.durationMin}分`, c.caloriesBurned, ''])
-    const strengthRows = data.strengthLogs
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .flatMap((s) =>
-        s.sets.map((set, i) => [
-          s.date, '筋トレ', s.name, `セット${i + 1}`, set.weight, set.reps,
-        ])
-      )
-    downloadCSV(
-      toCSV([...cardioRows, ...strengthRows],
-        ['日付', '種別', '種目', '時間/セット', '重量/消費kcal', '回数/秒数']),
-      'fitlog_exercise.csv'
-    )
-  }
 
   return (
     <div className="p-4 space-y-4">
@@ -301,18 +244,19 @@ export default function Report() {
         <h2 className="font-semibold text-gray-700 mb-3">データエクスポート</h2>
         <div className="space-y-2">
           {[
-            { label: '体重・体組成データ', action: exportBodyCSV, color: 'bg-green-500 hover:bg-green-600' },
-            { label: '食事記録データ',     action: exportMealCSV, color: 'bg-blue-500 hover:bg-blue-600' },
-            { label: '運動記録データ',     action: exportExerciseCSV, color: 'bg-orange-500 hover:bg-orange-600' },
-          ].map(({ label, action, color }) => (
-            <button key={label} onClick={action}
+            { label: '体重・体組成データ', kind: 'body',     color: 'bg-green-500 hover:bg-green-600' },
+            { label: '食事記録データ',     kind: 'meal',     color: 'bg-blue-500 hover:bg-blue-600' },
+            { label: '運動記録データ',     kind: 'exercise', color: 'bg-orange-500 hover:bg-orange-600' },
+            { label: '習慣記録データ',     kind: 'habit',    color: 'bg-amber-500 hover:bg-amber-600' },
+          ].map(({ label, kind, color }) => (
+            <button key={label} onClick={() => downloadCSV(kind as CsvKind, data)}
               className={`w-full ${color} text-white rounded-xl py-3 font-medium flex items-center justify-center gap-2 transition`}>
               <Download size={16} />
               {label}（CSV）
             </button>
           ))}
         </div>
-        <p className="text-xs text-gray-400 mt-2 text-center">全期間のデータをCSV形式でダウンロードします</p>
+        <p className="text-xs text-gray-400 mt-2 text-center">全期間のデータをCSV形式でダウンロードします（毎月1回、Googleドライブの FitLog_CSV フォルダにも自動で書き出します）</p>
       </div>
     </div>
   )
