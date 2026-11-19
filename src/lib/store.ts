@@ -14,15 +14,16 @@ const updatedAtOf = (item: object) => (item as Stamped).updatedAt
 
 /**
  * 同じ id の記録が両方にあるときに残す方を決める。
- * 両方に時刻があれば新しい方、片方にだけあればそちら（新しい版で直した記録）、
- * どちらにもなければ Drive 側（最後にどこかの端末が保存した状態）
+ * 両方に時刻があれば新しい方、片方にだけあればそちら（新しい版で直した記録）。
+ * どちらにもなければ手元を残す（Drive に届かなかった手元の変更を消さないため。古いままの手元が残っても、
+ * どこかの端末でその記録を直せば時刻が付いて、そちらが勝つ）
  */
 function pickNewer<T extends object>(local: T, remote: T): T {
   const l = updatedAtOf(local)
   const r = updatedAtOf(remote)
   if (l && r) return l > r ? local : remote
-  if (l) return local
-  return remote
+  if (r) return remote
+  return local
 }
 
 // id フィールドを持つレコードをマージ（どちらにしかないものも保持。両方にあるものは pickNewer で選ぶ）
