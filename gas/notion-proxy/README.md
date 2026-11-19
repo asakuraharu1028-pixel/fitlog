@@ -112,14 +112,30 @@ NFCタグ（`fitlog://stock?item=T01`）からアプリを開いたときは、�
    | `ALLOWED_EMAIL` | fitlog にログインしている Google アカウント |
    | `STOCK_SHEET_ID` | 家計簿スプレッドシートのID（日用品の在庫を使うときだけ） |
    | `STOCK_APP_URL` | 家計簿GASの在庫アプリの /exec URL（同上） |
+   | `GOOGLE_CLIENT_SECRET` | Google ログインの Web クライアントのシークレット（Google Cloud Console の「認証情報」。Android のログインに使う） |
 
 4. **動作確認**：エディタで `debugListRecipes` を実行します。初回は権限の承認が出ます。ログに `recipes: 68` と1件目の内容が出れば OK です。
 5. **デプロイ**：「デプロイ」→「新しいデプロイ」→ 種類「ウェブアプリ」、次のユーザーとして実行「自分」、アクセスできるユーザー「全員」。
    - 発行された `https://script.google.com/macros/s/.../exec` の URL を控えます（手順3でアプリの環境変数に入れます）。
    - ブラウザでその URL を開き、`{"ok":true,"service":"fitlog-recipe-proxy"}` が出れば公開できています。
    - コードを直したときは「デプロイを管理」→ 編集 →「新バージョン」で更新すると、URL が変わりません。
+   - clasp でも更新できます。作業用のフォルダに `.clasp.json`（`{"scriptId":"14cgvI7zwfgGaCdF6wcfwqQA0NyMin5b8zpHI479UjGQGe4uOhVJBAQo9"}`）を置いて `clasp pull` し（本番のコードは `コード.js` という名前）、`Code.gs` の中身を `コード.js` に写して `clasp push` → `clasp update-deployment <デプロイID>` で更新します。デプロイ ID は `clasp deployments` で出る、`@HEAD` ではない方です。
 
 「全員」に公開しても、正しい Google アカウントのトークンがない呼び出しは `forbidden` / `unauthorized` で断ります。
+
+## Android のログイン（exchangeAuthCode）
+
+Android のアプリは Google ログインで `serverAuthCode` を受け取り、この中継でアクセストークンに換えます。Web クライアントのシークレットはここ（スクリプトプロパティ `GOOGLE_CLIENT_SECRET`）にだけ置き、アプリには持たせません（画面の JS に入れると誰でも読めるため）。
+
+```json
+{ "action": "exchangeAuthCode", "code": "<serverAuthCode>", "clientId": "<Web クライアントID>" }
+{ "ok": true, "data": { "accessToken": "...", "expiresIn": 3599 } }
+```
+
+- ログインの前に呼ぶので、これだけは `token` なしで受け付けます。
+- 換えたトークンで `ALLOWED_EMAIL` のアカウントか確かめ、違えばトークンを無効にして `forbidden` を返します。
+- リフレッシュトークンはアプリに渡しません（Android は `GoogleAuth.refresh()` で取り直します）。
+- シークレットを作り直したら、`GOOGLE_CLIENT_SECRET` を新しい値に変えるだけで済みます（アプリの作り直しは要りません）。
 
 ## 棚卸しと保管場所の変更（stockPlace / stockSetCount / stockSetPlace）
 
