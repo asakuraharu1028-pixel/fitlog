@@ -1,7 +1,52 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Home, Utensils, Dumbbell, Scale, LayoutGrid } from 'lucide-react'
 import { useAppStore } from '../lib/store'
 import { MENU_PATHS } from '../lib/menu'
+import { isNative, signIn, signInSilent } from '../lib/auth'
+
+/**
+ * Drive に保存・読み込みできなかったときの帯。
+ * 多くはログインの期限切れなので、「つなぎ直す」でログインし直してから Drive を読み直す
+ * （読み直しのマージで、この端末にしかない記録も Drive に書き戻される）。
+ * 次に保存か読み込みが成功すると、store が driveError を空にするので帯は消える
+ */
+function DriveErrorBanner({ message }: { message: string }) {
+  const [busy, setBusy] = useState(false)
+  const [retryError, setRetryError] = useState<string | null>(null)
+
+  const reconnect = async () => {
+    setBusy(true)
+    setRetryError(null)
+    try {
+      // Web はボタンを押した操作の中でログインするので、ポップアップが止められない
+      const token = isNative ? (await signInSilent()) ?? (await signIn()) : await signIn()
+      if (!token) throw new Error('ログインできませんでした')
+      await useAppStore.getState().loadData()
+    } catch (e) {
+      setRetryError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div role="alert" className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-semibold">Drive に保存できていません。記録はこの端末に残っています</p>
+        <button
+          type="button"
+          onClick={reconnect}
+          disabled={busy}
+          className="shrink-0 rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          {busy ? 'つなぎ直し中...' : 'つなぎ直す'}
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-red-500 break-all">{retryError ?? message}</p>
+    </div>
+  )
+}
 
 const navItems = [
   { to: '/', icon: Home, label: 'ホーム' },
@@ -12,7 +57,7 @@ const navItems = [
 ]
 
 export default function Layout() {
-  const { isSaving } = useAppStore()
+  const { isSaving, driveError } = useAppStore()
   const { pathname } = useLocation()
   // カレンダー・レポート・献立・設定などはメニューから開くので、そのときはメニュータブを選択中にする
   const inMenu = MENU_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
@@ -25,6 +70,7 @@ export default function Layout() {
           <span className="text-xs text-gray-400">保存中...</span>
         )}
       </header>
+      {driveError && <DriveErrorBanner message={driveError} />}
 
       <main className="flex-1 pb-24">
         <Outlet />
