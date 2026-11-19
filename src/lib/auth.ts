@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth'
 import { initGoogleAuth, requestAccessToken, setAccessToken } from './google'
+import { callProxyNoAuth } from './recipeproxy'
 
 export const isNative = Capacitor.isNativePlatform()
 
@@ -13,8 +14,8 @@ const DRIVE_SCOPES = [
 
 // Android サインイン用クライアント（Android OAuth クライアント）
 const ANDROID_CLIENT_ID = '685129420203-dufioist84icrt495iahbbqh67b76p6p.apps.googleusercontent.com'
-// Web クライアントのシークレット（ビルド時に環境変数から注入）
-const WEB_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET as string
+// Web クライアントのシークレットはアプリに持たせない（画面の JS に入ると誰でも読めるため）。
+// serverAuthCode のトークン交換は GAS 中継（gas/notion-proxy の exchangeAuthCode）が行う
 
 export async function initAuth(): Promise<void> {
   if (isNative) {
@@ -36,25 +37,15 @@ export async function signIn(): Promise<string> {
     const authCode = user.serverAuthCode
     if (!authCode) throw new Error('serverAuthCode を取得できませんでした')
 
-    // Web クライアントのシークレットで交換 → Web と同じ appDataFolder にアクセスできる
-    const params = new URLSearchParams({
+    // GAS 中継が Web クライアントのシークレットで交換 → Web と同じ appDataFolder にアクセスできる
+    const res = await callProxyNoAuth<{ accessToken: string; expiresIn?: number }>({
+      action: 'exchangeAuthCode',
       code: authCode,
-      client_id: WEB_CLIENT_ID,
-      client_secret: WEB_CLIENT_SECRET,
-      grant_type: 'authorization_code',
-      redirect_uri: '',
+      clientId: WEB_CLIENT_ID,
     })
-    const res = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString(),
-    })
-    const json = await res.json()
-    if (!json.access_token) {
-      throw new Error(`トークン交換失敗: ${json.error_description ?? JSON.stringify(json)}`)
-    }
-    setAccessToken(json.access_token)
-    return json.access_token
+    if (!res.ok) throw new Error(`トークン交換失敗: ${res.error}`)
+    setAccessToken(res.data.accessToken)
+    return res.data.accessToken
   }
   return requestAccessToken()
 }

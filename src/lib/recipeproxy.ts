@@ -29,6 +29,18 @@ export function isRecipeProxyConfigured(): boolean {
   return !!PROXY_URL
 }
 
+// ログイン前に呼ぶ中継（トークンを付けない）。今は Android のログインコードの交換だけ
+export async function callProxyNoAuth<T>(body: Record<string, unknown>): Promise<ProxyResponse<T>> {
+  if (!PROXY_URL) throw new Error('VITE_RECIPE_PROXY_URL is not set')
+  const res = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`Recipe proxy error: ${res.status}`)
+  return (await res.json()) as ProxyResponse<T>
+}
+
 export async function callProxy<T>(body: Record<string, unknown>, retry = true): Promise<ProxyResponse<T>> {
   if (!PROXY_URL) throw new Error('VITE_RECIPE_PROXY_URL is not set')
   const token = getAccessToken()

@@ -12,6 +12,7 @@
  *   ALLOWED_EMAIL  呼び出しを許可する Google アカウントのメールアドレス
  *   STOCK_SHEET_ID 家計簿スプレッドシートのID（在庫の状況を返すときだけ使う）
  *   STOCK_APP_URL  家計簿GASの在庫アプリの /exec URL（通知から開く先）
+ *   GOOGLE_CLIENT_SECRET  Google ログインの Web クライアントのシークレット（Android のログインコードの交換だけに使う）
  *
  * 呼び出し（POST, Content-Type: text/plain でプリフライトを避ける）:
  *   { "action": "listRecipes", "token": "<Google アクセストークン>", "refresh": false }
@@ -22,6 +23,8 @@
  *   { "action": "stockStatus", "token": "..." }  → data: 要購入の品目と、棚卸しを勧める保管場所
  *   { "action": "stockItem", "token": "...", "id": "T01" }  → data: 品目1件（NFCタグから開いたとき）
  *   { "action": "stockChange", "token": "...", "id": "T01", "delta": -1, "reason": "使った" } → data: 変更後の品目
+ *   { "action": "exchangeAuthCode", "code": "<serverAuthCode>", "clientId": "<Web クライアントID>" }
+ *     → data: { accessToken, expiresIn }（Android のログイン用。token は要らない。本人のアカウントでなければ断る）
  * 応答:
  *   { "ok": true, "data": { "version": 1, "recipes": [...], "fetchedAt": "..." } }
  *   { "ok": false, "error": "unauthorized" }
@@ -93,6 +96,10 @@ function doGet() {
 function doPost(e) {
   try {
     const req = JSON.parse((e && e.postData && e.postData.contents) || '{}')
+    // ログイン前に呼ぶので、これだけはトークンなしで受け付ける（中で本人か確かめる）
+    if (req.action === 'exchangeAuthCode') {
+      return json_({ ok: true, data: exchangeAuthCode_(req.code, req.clientId) })
+    }
     authorize_(req.token)
     switch (req.action) {
       case 'listRecipes':
@@ -149,6 +156,49 @@ function authorize_(token) {
   const user = JSON.parse(res.getContentText()).user || {}
   if (String(user.emailAddress || '').toLowerCase() !== allowed) throw new Error('forbidden')
   cache.put(key, allowed, AUTH_CACHE_SECONDS)
+}
+
+// Android のログインで受け取った serverAuthCode を、Web クライアントのシークレットでアクセストークンに換える。
+// シークレットはスクリプトプロパティにだけ置き、アプリには持たせない。
+// 換えたトークンで authorize_ を通し、ALLOWED_EMAIL のアカウントでなければトークンを無効にして断る
+function exchangeAuthCode_(code, clientId) {
+  if (!code || typeof code !== 'string') throw new Error('code is required')
+  if (!clientId || typeof clientId !== 'string' || !/\.apps\.googleusercontent\.com$/.test(clientId)) {
+    throw new Error('clientId is invalid')
+  }
+  const res = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', {
+    method: 'post',
+    payload: {
+      code: code,
+      client_id: clientId,
+      client_secret: prop_('GOOGLE_CLIENT_SECRET'),
+      grant_type: 'authorization_code',
+      redirect_uri: '',
+    },
+    muteHttpExceptions: true,
+  })
+  const body = JSON.parse(res.getContentText() || '{}')
+  if (res.getResponseCode() !== 200 || !body.access_token) {
+    throw new Error('token exchange failed: ' + (body.error_description || body.error || res.getResponseCode()))
+  }
+  try {
+    authorize_(body.access_token)
+  } catch (err) {
+    revokeToken_(body.refresh_token || body.access_token)
+    throw err
+  }
+  // リフレッシュトークンはアプリに渡さない（Android は GoogleAuth.refresh() で取り直す）
+  return { accessToken: body.access_token, expiresIn: body.expires_in }
+}
+
+function revokeToken_(token) {
+  try {
+    UrlFetchApp.fetch('https://oauth2.googleapis.com/revoke', {
+      method: 'post',
+      payload: { token: token },
+      muteHttpExceptions: true,
+    })
+  } catch (e) { /* 無効にできなくても断るのは変わらない */ }
 }
 
 // ---- レシピ取得 ----
