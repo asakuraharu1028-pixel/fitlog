@@ -7,12 +7,66 @@ import { syncReminders } from './reminders'
 import { mergeRewards } from './rewards'
 import { autoExportMonthlyCSV } from './autoExport'
 
-// id フィールドを持つレコードをマージ（ローカル優先、どちらにしかないものも保持）
+// 記録ごとの「最後に変えた時刻」（ISO 文字列）。saveData() が変わった記録にだけ付ける。
+// 付く前の古い記録にはない
+type Stamped = { id: string; updatedAt?: string }
+const updatedAtOf = (item: object) => (item as Stamped).updatedAt
+
+/**
+ * 同じ id の記録が両方にあるときに残す方を決める。
+ * 両方に時刻があれば新しい方、片方にだけあればそちら（新しい版で直した記録）、
+ * どちらにもなければ Drive 側（最後にどこかの端末が保存した状態）
+ */
+function pickNewer<T extends object>(local: T, remote: T): T {
+  const l = updatedAtOf(local)
+  const r = updatedAtOf(remote)
+  if (l && r) return l > r ? local : remote
+  if (l) return local
+  return remote
+}
+
+// id フィールドを持つレコードをマージ（どちらにしかないものも保持。両方にあるものは pickNewer で選ぶ）
 function mergeById<T extends { id: string }>(local: T[], remote: T[]): T[] {
   const map = new Map<string, T>()
   for (const item of remote) map.set(item.id, item)
-  for (const item of local) map.set(item.id, item) // ローカルが新しい場合はローカル優先
+  for (const item of local) {
+    const other = map.get(item.id)
+    map.set(item.id, other ? pickNewer(item, other) : item)
+  }
   return Array.from(map.values())
+}
+
+// id で合わせる記録の配列（saveData() で時刻を付ける対象）
+const STAMPED_KEYS = [
+  'mealLogs', 'bodyRecords', 'cardioLogs', 'strengthLogs', 'sleepLogs',
+  'adviceLogs', 'templateFoods', 'periodLogs', 'careLogs',
+] as const satisfies readonly (keyof AppData)[]
+
+const withoutUpdatedAt = (item: object) => {
+  const rest = { ...(item as Stamped) }
+  delete rest.updatedAt
+  return JSON.stringify(rest)
+}
+
+/** 保存前と比べて、新しく足した記録と中身が変わった記録にだけ updatedAt を付ける */
+function stampChanged<T extends { id: string }>(prev: T[] | undefined, next: T[], now: string): T[] {
+  const before = new Map((prev ?? []).map(x => [x.id, x]))
+  return next.map(item => {
+    const old = before.get(item.id)
+    if (old === item) return item
+    if (old && withoutUpdatedAt(old) === withoutUpdatedAt(item)) return item
+    return { ...item, updatedAt: now }
+  })
+}
+
+function stampPatch(prev: AppData, patch: Partial<AppData>): Partial<AppData> {
+  const now = new Date().toISOString()
+  const stamped: Partial<AppData> = { ...patch }
+  for (const key of STAMPED_KEYS) {
+    const next = patch[key]
+    if (next) (stamped as Record<string, unknown>)[key] = stampChanged(prev[key] as Stamped[] | undefined, next as Stamped[], now)
+  }
+  return stamped
 }
 
 // StepLog は id なし・date キーでマージ（歩数の多い方を優先）
@@ -184,7 +238,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   saveData: async (patch) => {
-    const next = { ...get().data, ...patch }
+    const prev = get().data
+    const next = { ...prev, ...stampPatch(prev, patch) }
     set({ data: next, isSaving: true, driveError: null })
     saveToLocal(next)
     syncWidgetData(next)
