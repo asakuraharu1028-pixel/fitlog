@@ -123,14 +123,25 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [isAuthenticated])
 
-  // Android：Drive の読み込みが終わったら Health Connect と自動同期し、前面に戻るたびにも同期する
+  // アプリ・タブが前面に戻ったら Drive から読み直してマージする。
+  // 開きっぱなしの端末が古いデータのまま保存すると、ほかの端末で入れた記録を Drive から消してしまうため
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      const { isLoading: loading, loadData } = useAppStore.getState()
+      if (!loading) loadData()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [isAuthenticated])
+
+  // Android：Drive の読み込みが終わるたびに Health Connect と自動同期する（起動時と、前面に戻って読み直したあと）。
+  // 読み直す前に同期すると古いデータのまま保存してしまうので、前面に戻った瞬間には同期しない
   // （権限がまだないときは何もしない。前回から15分以内なら飛ばす）
   useEffect(() => {
     if (!isNative || !isAuthenticated || isLoading) return
     autoSyncHealthConnect()
-    const onVisible = () => { if (document.visibilityState === 'visible') autoSyncHealthConnect() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [isAuthenticated, isLoading])
 
   // OAuthコールバックはログイン状態に関係なく表示
