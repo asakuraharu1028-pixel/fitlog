@@ -17,16 +17,23 @@ function toCSV(rows: (string | number)[][], headers: string[]) {
   return BOM + lines.join('\n')
 }
 
-function bodyCSV(data: AppData): string {
-  const rows = [...data.bodyRecords]
+/** month（'YYYY-MM'）を指定したら、その月の日付だけを残す。指定なしは全期間 */
+function inMonth(date: string, month?: string): boolean {
+  return !month || date.startsWith(month + '-')
+}
+
+function bodyCSV(data: AppData, month?: string): string {
+  const rows = data.bodyRecords
+    .filter((r) => inMonth(r.date, month))
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((r) => [r.date, r.weight, r.bodyFatPct ?? '', r.bmi ?? ''])
   return toCSV(rows, ['日付', '体重(kg)', '体脂肪率(%)', 'BMI'])
 }
 
-function mealCSV(data: AppData): string {
+function mealCSV(data: AppData, month?: string): string {
   const rows: (string | number)[][] = []
-  ;[...data.mealLogs]
+  data.mealLogs
+    .filter((log) => inMonth(log.date, month))
     .sort((a, b) => a.date.localeCompare(b.date))
     .forEach((log) => {
       log.entries.forEach((e) => {
@@ -36,11 +43,13 @@ function mealCSV(data: AppData): string {
   return toCSV(rows, ['日付', '食事タイプ', '食品名', '量(g)', 'カロリー(kcal)', 'タンパク質(g)', '脂質(g)', '炭水化物(g)'])
 }
 
-function exerciseCSV(data: AppData): string {
-  const cardioRows = [...data.cardioLogs]
+function exerciseCSV(data: AppData, month?: string): string {
+  const cardioRows = data.cardioLogs
+    .filter((c) => inMonth(c.date, month))
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((c) => [c.date, '有酸素', c.name, `${c.durationMin}分`, c.caloriesBurned, ''])
-  const strengthRows = [...data.strengthLogs]
+  const strengthRows = data.strengthLogs
+    .filter((s) => inMonth(s.date, month))
     .sort((a, b) => a.date.localeCompare(b.date))
     .flatMap((s) =>
       s.sets.map((set, i) => [s.date, '筋トレ', s.name, `セット${i + 1}`, set.weight, set.reps])
@@ -49,9 +58,10 @@ function exerciseCSV(data: AppData): string {
     ['日付', '種別', '種目', '時間/セット', '重量/消費kcal', '回数/秒数'])
 }
 
-function habitCSV(data: AppData): string {
+function habitCSV(data: AppData, month?: string): string {
   const labels = new Map(resolveCareItems(data).map((item) => [item.id, item.label]))
-  const rows = [...(data.careLogs ?? [])]
+  const rows = (data.careLogs ?? [])
+    .filter((l) => inMonth(l.date, month))
     .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
     .map((l) => [
       l.date,
@@ -61,13 +71,16 @@ function habitCSV(data: AppData): string {
   return toCSV(rows, ['日付', '習慣', '実施レベル'])
 }
 
-/** 全期間のデータから CSV の中身（BOM つき）を作る */
-export function buildCSV(kind: CsvKind, data: AppData): string {
+/**
+ * CSV の中身（BOM つき）を作る。month（'YYYY-MM'）を渡すとその月の分だけ、渡さなければ全期間。
+ * 自動書き出しは前月分、レポート画面の手動出力は全期間
+ */
+export function buildCSV(kind: CsvKind, data: AppData, month?: string): string {
   switch (kind) {
-    case 'body': return bodyCSV(data)
-    case 'meal': return mealCSV(data)
-    case 'exercise': return exerciseCSV(data)
-    case 'habit': return habitCSV(data)
+    case 'body': return bodyCSV(data, month)
+    case 'meal': return mealCSV(data, month)
+    case 'exercise': return exerciseCSV(data, month)
+    case 'habit': return habitCSV(data, month)
   }
 }
 
