@@ -22,12 +22,35 @@ function inMonth(date: string, month?: string): boolean {
   return !month || date.startsWith(month + '-')
 }
 
+/**
+ * 体重・体組成と睡眠時間。睡眠時間はその日（就寝日）の合計（分）。
+ * 同じ日に体重の記録が複数あるときは最初の行にだけ入れ、体重を記録していない日は体重の列を空にした行で出す
+ */
 function bodyCSV(data: AppData, month?: string): string {
-  const rows = data.bodyRecords
+  const sleepByDate = new Map<string, number>()
+  ;(data.sleepLogs ?? [])
+    .filter((s) => inMonth(s.date, month))
+    .forEach((s) => sleepByDate.set(s.date, (sleepByDate.get(s.date) ?? 0) + s.durationMin))
+
+  const sleepWritten = new Set<string>()
+  const sleepCell = (date: string): number | '' => {
+    const min = sleepByDate.get(date)
+    if (min === undefined || sleepWritten.has(date)) return ''
+    sleepWritten.add(date)
+    return Math.round(min)
+  }
+
+  const bodyRows = data.bodyRecords
     .filter((r) => inMonth(r.date, month))
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map((r) => [r.date, r.weight, r.bodyFatPct ?? '', r.bmi ?? ''])
-  return toCSV(rows, ['日付', '体重(kg)', '体脂肪率(%)', 'BMI'])
+    .map((r) => [r.date, r.weight, r.bodyFatPct ?? '', r.bmi ?? '', sleepCell(r.date)])
+  const sleepOnlyRows = [...sleepByDate.keys()]
+    .filter((date) => !sleepWritten.has(date))
+    .map((date) => [date, '', '', '', sleepCell(date)])
+
+  // sort は安定なので、同じ日の中では体重の行の順（睡眠時間を入れた行が先）が保たれる
+  const rows = [...bodyRows, ...sleepOnlyRows].sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+  return toCSV(rows, ['日付', '体重(kg)', '体脂肪率(%)', 'BMI', '睡眠時間(分)'])
 }
 
 function mealCSV(data: AppData, month?: string): string {

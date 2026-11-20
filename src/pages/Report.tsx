@@ -244,7 +244,7 @@ export default function Report() {
         <h2 className="font-semibold text-gray-700 mb-3">データエクスポート</h2>
         <div className="space-y-2">
           {[
-            { label: '体重・体組成データ', kind: 'body',     color: 'bg-green-500 hover:bg-green-600' },
+            { label: '体重・体組成・睡眠データ', kind: 'body',     color: 'bg-green-500 hover:bg-green-600' },
             { label: '食事記録データ',     kind: 'meal',     color: 'bg-blue-500 hover:bg-blue-600' },
             { label: '運動記録データ',     kind: 'exercise', color: 'bg-orange-500 hover:bg-orange-600' },
             { label: '習慣記録データ',     kind: 'habit',    color: 'bg-amber-500 hover:bg-amber-600' },
